@@ -7,8 +7,11 @@
 [![codecov](https://codecov.io/gh/AnniekStok/napari-segmentation-correction/branch/main/graph/badge.svg)](https://codecov.io/gh/AnniekStok/napari-segmentation-correction)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-segmentation-correction)](https://napari-hub.org/plugins/napari-segmentation-correction)
 
-A plugin for manually correcting cell segmentation in 3D (z, y, x) or 4D (t, z, y, x) (virtual) arrays.
+A basis for a napari plugin for manually correcting cell segmentation in 3D (z, y, x) or 4D (t, z, y, x) (virtual) arrays. 
 
+The plugin heavily relies on several very useful open source packages and other napari plugins:
+- orthogonal view widget: [napari multiple viewer widget](https://github.com/napari/napari/blob/e490e5535438ab338a23b17905a1952f15a6d27a/examples/multiple_viewer_widget.py)
+- table widget: [napari-skimage-regionprops](https://github.com/haesleinhuepf/napari-skimage-regionprops)
 ----------------------------------
 
 This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template.
@@ -25,14 +28,20 @@ https://napari.org/stable/plugins/index.html
 
 You can install `napari-segmentation-correction` via [pip]:
 
-    pip install napari-segmentation-correction
-
-
-
 To install latest development version :
 
     pip install git+https://github.com/AnniekStok/napari-segmentation-correction.git
 
+## Usage
+This plugin aims to help you correct segmentation results. It can work with 3D arrays, 4D arrays, or 4D virtual arrays. There are several functionalities: 
+- explore label properties in a table widget
+- filter labels by size
+- select/delete labels with point layer selection
+- copy labels from one array to another with point layer selection
+- erode/dilate labels
+- smooth labels
+
+![](instructions/napari-ndlabelcorrection_filter_by_size.gif)
 
 ## Contributing
 

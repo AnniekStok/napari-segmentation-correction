@@ -6,3 +6,9 @@ visibility: public
 categories: ["Annotation", "Segmentation", "Acquisition"]
 contributions:
   commands:
+      - id: napari-ndlabelcuration.annotateND
+      python_name: napari_ndlabelcuration._widget:AnnotateLabelsND
+      title: ND Label Annotation 
+  widgets:
+      - command: napari-ndlabelcuration.annotateND
+        display_name: ND Label Annotation 

@@ -8,13 +8,14 @@ import functools
 import napari
 import tifffile
 import numpy        as np
+import dask.array   as da
 
-from scipy.ndimage import binary_erosion
-from scipy import ndimage
-from dask_image.imread import imread
-import dask.array as da
+from scipy.ndimage                          import binary_erosion
+from scipy                                  import ndimage
+from dask_image.imread                      import imread
+from typing                                 import Tuple
 
-from napari.layers                          import Labels, Points
+from napari.layers                          import Image, Labels, Points
 from skimage                                import measure
 from skimage.io                             import imread
 from skimage.segmentation                   import expand_labels
@@ -33,7 +34,7 @@ class LayerDropdown(QComboBox):
     
     layer_changed = pyqtSignal(str)  # Define a signal to emit the selected layer name
 
-    def __init__(self, viewer, layer_type):
+    def __init__(self, viewer, layer_type:Tuple):
         super().__init__()
         self.viewer = viewer
         self.layer_type = layer_type
@@ -104,7 +105,7 @@ class AnnotateLabelsND(QWidget):
         self.settings_layout.addLayout(outputbox_layout)
 
         ### create the dropdown for selecting label images
-        self.label_dropdown = LayerDropdown(self.viewer, Labels)
+        self.label_dropdown = LayerDropdown(self.viewer, (Labels))
         self.label_dropdown.layer_changed.connect(self._update_labels)
         self.settings_layout.addWidget(self.label_dropdown)
 
@@ -135,7 +136,7 @@ class AnnotateLabelsND(QWidget):
         ### Add widget for filtering by points layer
         point_filter_box = QGroupBox('Select objects with points')
         point_filter_layout = QVBoxLayout()
-        self.point_dropdown = LayerDropdown(self.viewer, Points)
+        self.point_dropdown = LayerDropdown(self.viewer, (Points))
         self.point_dropdown.layer_changed.connect(self._update_points)
 
         remove_keep_btn_layout = QHBoxLayout()
@@ -156,11 +157,11 @@ class AnnotateLabelsND(QWidget):
         copy_labels_box = QGroupBox('Copy-paste labels')
         copy_labels_layout = QVBoxLayout()
 
-        self.source_label_dropdown = LayerDropdown(self.viewer, Labels)
+        self.source_label_dropdown = LayerDropdown(self.viewer, (Labels))
         self.source_label_dropdown.layer_changed.connect(self._update_source_labels)
-        self.copy_point_dropdown = LayerDropdown(self.viewer, Points)
+        self.copy_point_dropdown = LayerDropdown(self.viewer, (Points))
         self.copy_point_dropdown.layer_changed.connect(self._update_copy_points)
-        self.target_label_dropdown = LayerDropdown(self.viewer, Labels) 
+        self.target_label_dropdown = LayerDropdown(self.viewer, (Labels)) 
         self.target_label_dropdown.layer_changed.connect(self._update_target_labels)
    
         copy_paste_btn = QPushButton('Copy-paste labels')
@@ -269,6 +270,62 @@ class AnnotateLabelsND(QWidget):
         dil_erode_box.setLayout(dil_erode_box_layout)
         self.settings_layout.addWidget(dil_erode_box)
 
+        ### Threshold image
+        threshold_box = QGroupBox('Threshold')
+        threshold_box_layout = QVBoxLayout()
+
+        self.threshold_layer_dropdown = LayerDropdown(self.viewer, (Image, Labels))
+        self.threshold_layer_dropdown.layer_changed.connect(self._update_threshold_layer)
+        threshold_box_layout.addWidget(self.threshold_layer_dropdown)
+
+        min_threshold_layout = QHBoxLayout()
+        min_threshold_layout.addWidget(QLabel('Min value'))
+        self.min_threshold = QSpinBox()
+        self.min_threshold.setMaximum(65535)
+        min_threshold_layout.addWidget(self.min_threshold)
+
+        max_threshold_layout = QHBoxLayout()
+        max_threshold_layout.addWidget(QLabel('Max value'))
+        self.max_threshold = QSpinBox()
+        self.max_threshold.setMaximum(65535)
+        self.max_threshold.setValue(65535)
+        max_threshold_layout.addWidget(self.max_threshold)
+
+        threshold_box_layout.addLayout(min_threshold_layout)
+        threshold_box_layout.addLayout(max_threshold_layout)
+        threshold_btn = QPushButton('Run')
+        threshold_btn.clicked.connect(self._threshold)
+        threshold_box_layout.addWidget(threshold_btn)
+        
+        threshold_box.setLayout(threshold_box_layout)
+        self.settings_layout.addWidget(threshold_box)
+
+        ### Add one image to another
+        image_calc_box = QGroupBox('Add images')
+        image_calc_box_layout = QVBoxLayout()
+
+        image1_layout = QHBoxLayout()
+        image1_layout.addWidget(QLabel('Label image 1'))
+        self.image1_dropdown = LayerDropdown(self.viewer, (Labels))
+        self.image1_dropdown.layer_changed.connect(self._update_image1)
+        image1_layout.addWidget(self.image1_dropdown)
+
+        image2_layout = QHBoxLayout()
+        image2_layout.addWidget(QLabel('Label image 2'))
+        self.image2_dropdown = LayerDropdown(self.viewer, (Labels))
+        self.image2_dropdown.layer_changed.connect(self._update_image2)
+        image2_layout.addWidget(self.image2_dropdown)
+
+        image_calc_box_layout.addLayout(image1_layout)
+        image_calc_box_layout.addLayout(image2_layout)
+
+        add_images_btn = QPushButton('Add labels2 to labels1')
+        add_images_btn.clicked.connect(self._add_images)
+        image_calc_box_layout.addWidget(add_images_btn)
+
+        image_calc_box.setLayout(image_calc_box_layout)
+        self.settings_layout.addWidget(image_calc_box)
+
         ### add the button to show the cross in multiview
         cross_box = QGroupBox('Add cross to multiview')
         cross_box_layout = QHBoxLayout()
@@ -355,6 +412,33 @@ class AnnotateLabelsND(QWidget):
         else:
             self.copy_points = self.viewer.layers[selected_layer]
             self.copy_point_dropdown.setCurrentText(selected_layer)
+    
+    def _update_threshold_layer(self, selected_layer) -> None:
+        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
+
+        if selected_layer == '':
+            self.threshold_layer = None
+        else:
+            self.threshold_layer = self.viewer.layers[selected_layer]
+            self.threshold_layer_dropdown.setCurrentText(selected_layer)
+
+    def _update_image1(self, selected_layer) -> None:
+        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
+
+        if selected_layer == '':
+            self.image1_layer = None
+        else:
+            self.image1_layer = self.viewer.layers[selected_layer]
+            self.image1_dropdown.setCurrentText(selected_layer)
+
+    def _update_image2(self, selected_layer) -> None:
+        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
+
+        if selected_layer == '':
+            self.image2_layer = None
+        else:
+            self.image2_layer = self.viewer.layers[selected_layer]
+            self.image2_dropdown.setCurrentText(selected_layer)
 
     def _convert_to_array(self) -> None: 
         """Convert from dask array to in-memory array. This is necessary for manual editing using the label tools (brush, eraser, fill bucket)."""
@@ -820,3 +904,25 @@ class AnnotateLabelsND(QWidget):
                 self._update_labels(self.labels.name)
             else: 
                 print('input should be a 3D or 4D stack')
+    
+    def _threshold(self): 
+        """Threshold the selected label or intensity image"""
+
+        if type(self.threshold_layer.data) == da.core.Array:
+                msg = QMessageBox()
+                msg.setWindowTitle("Thresholding not yet implemented for dask arrays")
+                msg.setText("Thresholding not yet implemented for dask arrays")
+                msg.setIcon(QMessageBox.Information)
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec_()
+                return False
+
+        thresholded = (self.threshold_layer.data >= int(self.min_threshold.value())) & (self.threshold_layer.data <= int(self.max_threshold.value()))
+        self.viewer.add_labels(thresholded, name = self.threshold_layer.name + "_thresholded")
+
+    def _add_images(self):
+        """Add label image 2 to label image 1"""
+
+        self.viewer.add_labels(np.clip(self.image1_layer.data + self.image2_layer.data, 0, 65535))
+
+

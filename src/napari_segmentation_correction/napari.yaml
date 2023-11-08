@@ -1,14 +1,12 @@
 name: napari-segmentation-correction
 display_name: Manual Segmentation Correction
-# use 'hidden' to remove plugin from napari hub search results
 visibility: public
-# see https://napari.org/stable/plugins/manifest.html for valid categories
-categories: ["Annotation", "Segmentation", "Acquisition"]
+categories: ["Annotation", "Segmentation"]
 contributions:
   commands:
-      - id: napari-ndlabelcuration.annotateND
-      python_name: napari_ndlabelcuration._widget:AnnotateLabelsND
-      title: ND Label Annotation 
+    - id: napari-segmentation-correction.annotateND
+      python_name: napari_segmentation_correction._widget:AnnotateLabelsND
+      title: Manual Segmentation Correction
   widgets:
-      - command: napari-ndlabelcuration.annotateND
-        display_name: ND Label Annotation 
+    - command: napari-segmentation-correction.annotateND
+      display_name: Manual Segmentation Correction

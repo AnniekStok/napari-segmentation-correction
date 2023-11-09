@@ -301,26 +301,38 @@ class AnnotateLabelsND(QWidget):
         self.settings_layout.addWidget(threshold_box)
 
         ### Add one image to another
-        image_calc_box = QGroupBox('Add images')
+        image_calc_box = QGroupBox('Image calculator')
         image_calc_box_layout = QVBoxLayout()
 
         image1_layout = QHBoxLayout()
         image1_layout.addWidget(QLabel('Label image 1'))
-        self.image1_dropdown = LayerDropdown(self.viewer, (Labels))
+        self.image1_dropdown = LayerDropdown(self.viewer, (Image, Labels))
         self.image1_dropdown.layer_changed.connect(self._update_image1)
         image1_layout.addWidget(self.image1_dropdown)
 
         image2_layout = QHBoxLayout()
         image2_layout.addWidget(QLabel('Label image 2'))
-        self.image2_dropdown = LayerDropdown(self.viewer, (Labels))
+        self.image2_dropdown = LayerDropdown(self.viewer, (Image, Labels))
         self.image2_dropdown.layer_changed.connect(self._update_image2)
         image2_layout.addWidget(self.image2_dropdown)
 
         image_calc_box_layout.addLayout(image1_layout)
         image_calc_box_layout.addLayout(image2_layout)
 
-        add_images_btn = QPushButton('Add labels2 to labels1')
-        add_images_btn.clicked.connect(self._add_images)
+        operation_layout = QHBoxLayout()
+        self.operation = QComboBox()
+        self.operation.addItem("Add")
+        self.operation.addItem("Subtract")
+        self.operation.addItem("Multiply")
+        self.operation.addItem("Divide")
+        self.operation.addItem("AND")
+        self.operation.addItem("OR")
+        operation_layout.addWidget(QLabel('Operation'))
+        operation_layout.addWidget(self.operation)
+        image_calc_box_layout.addLayout(operation_layout)
+
+        add_images_btn = QPushButton('Run')
+        add_images_btn.clicked.connect(self._calculate_images)
         image_calc_box_layout.addWidget(add_images_btn)
 
         image_calc_box.setLayout(image_calc_box_layout)
@@ -618,7 +630,6 @@ class AnnotateLabelsND(QWidget):
                     points = [p for p in self.points.data if p[0] == tp]
                     for p in points:
                         labels_to_keep.append(self.labels.data[tp, int(p[1]), int(p[2]), int(p[3])])
-                    print('these are the labels to remove for time point', tp, labels_to_keep)
                     mask = functools.reduce(np.logical_or, (self.labels.data[tp]==val for val in labels_to_keep))
                     inverse_mask = np.logical_not(mask)
                     filtered = np.where(inverse_mask, self.labels.data[tp], 0)
@@ -920,9 +931,36 @@ class AnnotateLabelsND(QWidget):
         thresholded = (self.threshold_layer.data >= int(self.min_threshold.value())) & (self.threshold_layer.data <= int(self.max_threshold.value()))
         self.viewer.add_labels(thresholded, name = self.threshold_layer.name + "_thresholded")
 
-    def _add_images(self):
+    def _calculate_images(self):
         """Add label image 2 to label image 1"""
 
-        self.viewer.add_labels(np.clip(self.image1_layer.data + self.image2_layer.data, 0, 65535))
-
+        if type(self.image1_layer) == da.core.Array or type(self.image2_layer) == da.core.Array:
+                msg = QMessageBox()
+                msg.setWindowTitle("Cannot yet run image calculator on dask arrays")
+                msg.setText("Cannot yet run image calculator on dask arrays")
+                msg.setIcon(QMessageBox.Information)
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec_()
+                return False
+        if self.image1_layer.data.shape != self.image2_layer.data.shape: 
+                msg = QMessageBox()
+                msg.setWindowTitle("Images must have the same shape")
+                msg.setText("Images must have the same shape")
+                msg.setIcon(QMessageBox.Information)
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec_()
+                return False
+              
+        if self.operation.currentText() == "Add":
+            self.viewer.add_image(np.add(self.image1_layer.data, self.image2_layer.data))
+        if self.operation.currentText() == "Subtract":
+            self.viewer.add_image(np.subtract(self.image1_layer.data, self.image2_layer.data))
+        if self.operation.currentText() == "Multiply":
+            self.viewer.add_image(np.multiply(self.image1_layer.data, self.image2_layer.data))
+        if self.operation.currentText() == "Divide":
+            self.viewer.add_image(np.divide(self.image1_layer.data, self.image2_layer.data, out=np.zeros_like(self.image1_layer.data, dtype=float), where=self.image2_layer.data!=0))
+        if self.operation.currentText() == "AND":
+            self.viewer.add_labels(np.logical_and(self.image1_layer.data != 0, self.image2_layer.data != 0).astype(int))
+        if self.operation.currentText() == "OR":
+            self.viewer.add_labels(np.logical_or(self.image1_layer.data != 0, self.image2_layer.data != 0).astype(int))
 

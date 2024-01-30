@@ -642,7 +642,7 @@ class AnnotateLabelsND(QWidget):
             label_stacks = []
             for d in label_dirs:
                 # n dirs indicates number of channels
-                label_files = [f for f in os.listdir(os.path.join(path, d)) if '.tif' in f]
+                label_files = sorted([f for f in os.listdir(os.path.join(path, d)) if '.tif' in f])
                 label_imgs = []
                 for f in label_files:
                     # n label_files indicates n time points

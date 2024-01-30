@@ -656,9 +656,9 @@ class AnnotateLabelsND(QWidget):
                     label_stacks.append(img)
             
             if len(label_stacks) > 1:
-                self.option_labels = self.viewer.add_labels(np.stack(label_stacks, axis = 0), name='label options')
+                self.option_labels = np.stack(label_stacks, axis = 0)
             elif len(label_stacks) == 1:
-                self.option_labels = self.viewer.add_labels(label_stacks[0], name='label options')
+                self.option_labels = label_stacks[0]
             
             n_channels = len(label_dirs)
             n_timepoints = len(label_files)
@@ -666,7 +666,9 @@ class AnnotateLabelsND(QWidget):
                 n_slices = img.shape[0]
             elif len(img.shape) == 2:
                 n_slices = 1
-            self.option_labels.data = self.option_labels.data.reshape(n_channels, n_timepoints, n_slices, img.shape[-2], img.shape[-1])    
+            
+            self.option_labels = self.option_labels.reshape(n_channels, n_timepoints, n_slices, img.shape[-2], img.shape[-1])    
+            self.option_labels = self.viewer.add_labels(self.option_labels, name = 'label options')
 
         viewer = self.viewer
         @viewer.mouse_drag_callbacks.append
@@ -683,7 +685,8 @@ class AnnotateLabelsND(QWidget):
                     if orig_label != 0: 
                         target_stack[target_stack == orig_label] = 0  
                     target_stack[mask] = np.max(target_stack) + 1
-                    self.labels.data[coords[-4]] = target_stack 
+                    self.labels.data[coords[-4]] = target_stack
+                    self.labels.data = self.labels.data
                 
                 else: 
                     if len(self.labels.data.shape) == 3:
@@ -702,62 +705,23 @@ class AnnotateLabelsND(QWidget):
                         self.labels.data[coords[-4]][mask] = np.max(self.labels.data) + 1
                         self.labels.data = self.labels.data
                     
+                    elif len(self.labels.data.shape) == 5:
+                        msg_box = QMessageBox()
+                        msg_box.setIcon(QMessageBox.Question)
+                        msg_box.setText("Copy-pasting in 5 dimensions is not implemented, do you want to convert the labels layer to 5 dimensions (tzyx)?")
+                        msg_box.setWindowTitle("Convert to 4 dimensions?")
+
+                        yes_button = msg_box.addButton(QMessageBox.Yes)
+                        no_button = msg_box.addButton(QMessageBox.No)
+
+                        msg_box.exec_()
+
+                        if msg_box.clickedButton() == yes_button:
+                            self.labels.data = self.labels.data[0]
+                        elif msg_box.clickedButton() == no_button:
+                            return False                  
                     else:
                         print('copy-pasting in more than 5 dimensions is not supported')
-                
-    def _copy_paste(self) -> None:
-        """Copy-paste labels from a multi-option labels layer to the current labels layer."""
-
-        # Copying from a 3D array to another 3D array.
-        if len(self.source_labels.data.shape) == 3 and len(self.target_labels.data.shape) == 3:
-            labels_to_copy = []
-            for p in self.copy_points.data:
-                if len(p) == 3:
-                    labels_to_copy.append(self.source_labels.data[int(p[0]), int(p[1]), int(p[2])])
-                elif len(p) == 4:
-                    labels_to_copy.append(self.source_labels.data[int(p[1]), int(p[2]), int(p[3])])
-            mask = np.isin(self.source_labels.data, labels_to_copy)
-            self.target_labels.data[mask] = self.source_labels.data[mask]
-            self.target_labels.data = self.target_labels.data
-
-        # Copying from a 3D array to the current location in the 4D target array.
-        elif len(self.source_labels.data.shape) == 3: 
-            tp = int(self.copy_points.data[0][0])
-            labels_to_copy = []
-            for p in self.copy_points.data:
-                labels_to_copy.append(self.source_labels.data[int(p[1]), int(p[2]), int(p[3])])
-            mask = np.isin(self.source_labels.data, labels_to_copy)
-
-            if type(self.target_labels.data) == da.core.Array:
-                target_stack = self.target_labels.data[tp].compute()
-                target_stack[mask] = self.source_labels.data[mask]
-                self.target_labels.data[tp] = target_stack
-            else:
-                self.target_labels.data[tp][mask] = self.source_labels.data[mask]
-        
-        # Copy from a 4D array to the same location in target 4D array.         
-        else:
-            tps = np.unique([int(p[0]) for p in self.copy_points.data])
-            for tp in tps:
-                labels_to_copy = []               
-                points = [p for p in self.copy_points.data if p[0] == tp]
-                if type(self.source_labels.data) == da.core.Array:
-                    current_stack = self.source_labels.data[tp].compute()  # Compute the current stack
-                else: 
-                    current_stack = self.source_labels.data[tp]
-                
-                for p in points:
-                    labels_to_copy.append(current_stack[int(p[1]), int(p[2]), int(p[3])])
-                mask = np.isin(current_stack, labels_to_copy)
-
-                if type(self.target_labels.data) == da.core.Array:
-                    target_stack = self.target_labels.data[tp].compute()
-                    target_stack[mask] = current_stack[mask]
-                    self.target_labels.data[tp] = target_stack
-                else:
-                    self.target_labels.data[tp][mask] = self.source_labels.data[tp][mask]
-            
-        self.target_labels.data = self.target_labels.data # to trigger viewer update
     
     def _delete_small_objects(self) -> None:
         """Delete small objects in the selected layer"""

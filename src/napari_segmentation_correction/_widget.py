@@ -59,7 +59,7 @@ class LayerDropdown(QComboBox):
 
         selected_layer = self.currentText()
         self.clear()
-        layers = [layer for layer in self.viewer.layers if isinstance(layer, self.layer_type)]
+        layers = [layer for layer in self.viewer.layers if isinstance(layer, self.layer_type) and not layer.name == "label options"]
         items = []
         for layer in layers:
             self.addItem(layer.name)
@@ -94,6 +94,7 @@ class AnnotateLabelsND(QWidget):
         self.outputdir = None
         self.settings_layout = QVBoxLayout()
         self.tab_widget = QTabWidget(self)
+        self.option_labels = None
 
         ### specify output directory
         outputbox_layout = QHBoxLayout()
@@ -157,32 +158,10 @@ class AnnotateLabelsND(QWidget):
         copy_labels_box = QGroupBox('Copy-paste labels')
         copy_labels_layout = QVBoxLayout()
 
-        self.source_label_dropdown = LayerDropdown(self.viewer, (Labels))
-        self.source_label_dropdown.layer_changed.connect(self._update_source_labels)
-        self.copy_point_dropdown = LayerDropdown(self.viewer, (Points))
-        self.copy_point_dropdown.layer_changed.connect(self._update_copy_points)
-        self.target_label_dropdown = LayerDropdown(self.viewer, (Labels)) 
-        self.target_label_dropdown.layer_changed.connect(self._update_target_labels)
-   
-        copy_paste_btn = QPushButton('Copy-paste labels')
-        copy_paste_btn.clicked.connect(self._copy_paste)
+        add_option_layer_btn = QPushButton('Add layer with different label options from folder')
+        add_option_layer_btn.clicked.connect(self._add_option_layer)
 
-        source_layout = QHBoxLayout()
-        source_layout.addWidget(QLabel('Source'))
-        source_layout.addWidget(self.source_label_dropdown)
-
-        point_layout = QHBoxLayout()
-        point_layout.addWidget(QLabel('Points'))
-        point_layout.addWidget(self.copy_point_dropdown)
-
-        target_layout = QHBoxLayout()
-        target_layout.addWidget(QLabel('Target'))
-        target_layout.addWidget(self.target_label_dropdown)
-        
-        copy_labels_layout.addLayout(source_layout)
-        copy_labels_layout.addLayout(point_layout)
-        copy_labels_layout.addLayout(target_layout)
-        copy_labels_layout.addWidget(copy_paste_btn)
+        copy_labels_layout.addWidget(add_option_layer_btn)
 
         copy_labels_box.setLayout(copy_labels_layout)
         self.settings_layout.addWidget(copy_labels_box)
@@ -653,8 +632,81 @@ class AnnotateLabelsND(QWidget):
                 self.labels = self.viewer.add_labels(filtered, name = self.labels.name + '_points_removed')
                 self._update_labels(self.labels.name)
 
+
+    def _add_option_layer(self):
+        """Add a new labels layer that contains different alternative segmentations as channels, and add a function to select and copy these cells through shift-clicking"""
+
+        path = QFileDialog.getExistingDirectory(self, 'Select Label Image Parent Folder')
+        if path:
+            label_dirs = sorted([d for d in os.listdir(path) if os.path.isdir(os.path.join(path, d))])
+            label_stacks = []
+            for d in label_dirs:
+                # n dirs indicates number of channels
+                label_files = [f for f in os.listdir(os.path.join(path, d)) if '.tif' in f]
+                label_imgs = []
+                for f in label_files:
+                    # n label_files indicates n time points
+                    img = imread(os.path.join(path, d, f))
+                    label_imgs.append(img)
+                
+                if len(label_imgs) > 1:
+                    label_stack = np.stack(label_imgs, axis = 0)
+                    label_stacks.append(label_stack)               
+                else:
+                    label_stacks.append(img)
+            
+            if len(label_stacks) > 1:
+                self.option_labels = self.viewer.add_labels(np.stack(label_stacks, axis = 0), name='label options')
+            elif len(label_stacks) == 1:
+                self.option_labels = self.viewer.add_labels(label_stacks[0], name='label options')
+            
+            n_channels = len(label_dirs)
+            n_timepoints = len(label_files)
+            if len(img.shape) == 3: 
+                n_slices = img.shape[0]
+            elif len(img.shape) == 2:
+                n_slices = 1
+            self.option_labels.data = self.option_labels.data.reshape(n_channels, n_timepoints, n_slices, img.shape[-2], img.shape[-1])    
+
+        viewer = self.viewer
+        @viewer.mouse_drag_callbacks.append
+        def cell_copied(viewer, event):
+            if event.type == "mouse_press" and 'Shift' in event.modifiers and viewer.layers.selection.active == self.option_labels:
+                coords = self.option_labels.world_to_data(event.position)
+                coords = [int(c) for c in coords]
+                selected_label = self.option_labels.get_value(coords)
+                mask = self.option_labels.data[coords[0], coords[1], :, :, :] == selected_label
+
+                if type(self.labels.data) == da.core.Array:
+                    target_stack = self.labels.data[coords[-4]].compute()
+                    orig_label = target_stack[coords[-3], coords[-2], coords[-1]]
+                    if orig_label != 0: 
+                        target_stack[target_stack == orig_label] = 0  
+                    target_stack[mask] = np.max(target_stack) + 1
+                    self.labels.data[coords[-4]] = target_stack 
+                
+                else: 
+                    if len(self.labels.data.shape) == 3:
+                        orig_label = self.labels.data[coords[-3], coords[-2], coords[-1]]
+
+                        if orig_label != 0:
+                            self.labels.data[self.labels.data == orig_label] = 0 # set the original label to zero                
+                        self.labels.data[mask] = np.max(self.labels.data) + 1
+                        self.labels.data = self.labels.data
+
+                    elif len(self.labels.data.shape) == 4:
+                        orig_label = self.labels.data[coords[-4], coords[-3], coords[-2], coords[-1]]
+
+                        if orig_label != 0: 
+                            self.labels.data[coords[-4]][self.labels.data[coords[-4]] == orig_label] = 0 # set the original label to zero                  
+                        self.labels.data[coords[-4]][mask] = np.max(self.labels.data) + 1
+                        self.labels.data = self.labels.data
+                    
+                    else:
+                        print('copy-pasting in more than 5 dimensions is not supported')
+                
     def _copy_paste(self) -> None:
-        """Copy-paste labels from one layer to another by selecting labels using a points layer."""
+        """Copy-paste labels from a multi-option labels layer to the current labels layer."""
 
         # Copying from a 3D array to another 3D array.
         if len(self.source_labels.data.shape) == 3 and len(self.target_labels.data.shape) == 3:

@@ -37,11 +37,14 @@ This plugin aims to help you correct segmentation results. It can work with 3D a
 - explore label properties in a table widget
 - filter labels by size
 - select/delete labels with point layer selection
-- copy labels from one array to another with point layer selection
+- copy labels from a nD array with multiple segmentation options to your current label layer. For this you have to add a special labels layer for which you need to select a folder that contains subfolders for the different options. In each subfolder, there should be one 3D image per time point (or just one image if there is only one time point).
 - erode/dilate labels
 - smooth labels
 
 ![](instructions/napari-ndlabelcorrection_filter_by_size.gif)
+
+![](instructions/copy-paste_labels.gif)
+
 
 ## Contributing
 

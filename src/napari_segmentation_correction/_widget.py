@@ -160,8 +160,11 @@ class AnnotateLabelsND(QWidget):
 
         add_option_layer_btn = QPushButton('Add layer with different label options from folder')
         add_option_layer_btn.clicked.connect(self._add_option_layer)
+        convert_to_option_layer_btn = QPushButton('Convert current labels layer to label options layer')
+        convert_to_option_layer_btn.clicked.connect(self._convert_to_option_layer)
 
         copy_labels_layout.addWidget(add_option_layer_btn)
+        copy_labels_layout.addWidget(convert_to_option_layer_btn)
 
         copy_labels_box.setLayout(copy_labels_layout)
         self.settings_layout.addWidget(copy_labels_box)
@@ -723,6 +726,72 @@ class AnnotateLabelsND(QWidget):
                     else:
                         print('copy-pasting in more than 5 dimensions is not supported')
     
+
+    def _convert_to_option_layer(self) -> None: 
+
+        if len(self.labels.data.shape) == 3: 
+            self.option_labels = self.viewer.add_labels(self.labels.data.reshape((1, 1, ) + self.labels.data.shape), name = "label options")
+        elif len(self.labels.data.shape) == 4: 
+            self.option_labels = self.viewer.add_labels(self.labels.data.reshape((1, ) + self.labels.data.shape), name = "label options")  
+        elif len(self.labels.data.shape) == 5:
+            self.option_labels = self.viewer.add_labels(self.labels.data, name = 'label options')
+        else: 
+            print('labels data must have at least 3 dimensions')
+            return
+
+        viewer = self.viewer
+        @viewer.mouse_drag_callbacks.append
+        def cell_copied(viewer, event):
+            if event.type == "mouse_press" and 'Shift' in event.modifiers and viewer.layers.selection.active == self.option_labels:
+                coords = self.option_labels.world_to_data(event.position)
+                coords = [int(c) for c in coords]
+                selected_label = self.option_labels.get_value(coords)
+                mask = self.option_labels.data[coords[0], coords[1], :, :, :] == selected_label
+
+                if type(self.labels.data) == da.core.Array:
+                    target_stack = self.labels.data[coords[-4]].compute()
+                    orig_label = target_stack[coords[-3], coords[-2], coords[-1]]
+                    if orig_label != 0: 
+                        target_stack[target_stack == orig_label] = 0  
+                    target_stack[mask] = np.max(target_stack) + 1
+                    self.labels.data[coords[-4]] = target_stack
+                    self.labels.data = self.labels.data
+                
+                else: 
+                    if len(self.labels.data.shape) == 3:
+                        orig_label = self.labels.data[coords[-3], coords[-2], coords[-1]]
+
+                        if orig_label != 0:
+                            self.labels.data[self.labels.data == orig_label] = 0 # set the original label to zero                
+                        self.labels.data[mask] = np.max(self.labels.data) + 1
+                        self.labels.data = self.labels.data
+
+                    elif len(self.labels.data.shape) == 4:
+                        orig_label = self.labels.data[coords[-4], coords[-3], coords[-2], coords[-1]]
+
+                        if orig_label != 0: 
+                            self.labels.data[coords[-4]][self.labels.data[coords[-4]] == orig_label] = 0 # set the original label to zero                  
+                        self.labels.data[coords[-4]][mask] = np.max(self.labels.data) + 1
+                        self.labels.data = self.labels.data
+                    
+                    elif len(self.labels.data.shape) == 5:
+                        msg_box = QMessageBox()
+                        msg_box.setIcon(QMessageBox.Question)
+                        msg_box.setText("Copy-pasting in 5 dimensions is not implemented, do you want to convert the labels layer to 5 dimensions (tzyx)?")
+                        msg_box.setWindowTitle("Convert to 4 dimensions?")
+
+                        yes_button = msg_box.addButton(QMessageBox.Yes)
+                        no_button = msg_box.addButton(QMessageBox.No)
+
+                        msg_box.exec_()
+
+                        if msg_box.clickedButton() == yes_button:
+                            self.labels.data = self.labels.data[0]
+                        elif msg_box.clickedButton() == no_button:
+                            return False                  
+                    else:
+                        print('copy-pasting in more than 5 dimensions is not supported')
+
     def _delete_small_objects(self) -> None:
         """Delete small objects in the selected layer"""
 

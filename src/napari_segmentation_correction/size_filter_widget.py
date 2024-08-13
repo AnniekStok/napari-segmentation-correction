@@ -1,5 +1,3 @@
-
-
 import functools
 import os
 import shutil
@@ -27,7 +25,9 @@ from .layer_manager import LayerManager
 class SizeFilterWidget(QWidget):
     """Widget to perform calculations between two images"""
 
-    def __init__(self, viewer: "napari.viewer.Viewer", label_manager: LayerManager) -> None:
+    def __init__(
+        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
+    ) -> None:
         super().__init__()
 
         self.viewer = viewer
@@ -55,7 +55,6 @@ class SizeFilterWidget(QWidget):
         layout.addWidget(filterbox)
         self.setLayout(layout)
 
-
     def _delete_small_objects(self) -> None:
         """Delete small objects in the selected layer"""
 
@@ -71,7 +70,8 @@ class SizeFilterWidget(QWidget):
 
             else:
                 outputdir = os.path.join(
-                    self.outputdir, (self.label_manager.selected_layer.name + "_sizefiltered")
+                    self.outputdir,
+                    (self.label_manager.selected_layer.name + "_sizefiltered"),
                 )
                 if os.path.exists(outputdir):
                     shutil.rmtree(outputdir)
@@ -116,16 +116,23 @@ class SizeFilterWidget(QWidget):
                 ]
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.label_manager.selected_layer.name + "_sizefiltered",
+                    name=self.label_manager.selected_layer.name
+                    + "_sizefiltered",
                 )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(
+                    self.label_manager.selected_layer.name
+                )
 
         else:
             # Image data is a normal array and can be directly edited.
             if len(self.label_manager.selected_layer.data.shape) == 4:
                 stack = []
-                for i in range(self.label_manager.selected_layer.data.shape[0]):
-                    props = measure.regionprops(self.label_manager.selected_layer.data[i])
+                for i in range(
+                    self.label_manager.selected_layer.data.shape[0]
+                ):
+                    props = measure.regionprops(
+                        self.label_manager.selected_layer.data[i]
+                    )
                     filtered_labels = [
                         p.label
                         for p in props
@@ -138,16 +145,23 @@ class SizeFilterWidget(QWidget):
                             for val in filtered_labels
                         ),
                     )
-                    filtered = np.where(mask, self.label_manager.selected_layer.data[i], 0)
+                    filtered = np.where(
+                        mask, self.label_manager.selected_layer.data[i], 0
+                    )
                     stack.append(filtered)
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     np.stack(stack, axis=0),
-                    name=self.label_manager.selected_layer.name + "_sizefiltered",
+                    name=self.label_manager.selected_layer.name
+                    + "_sizefiltered",
                 )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(
+                    self.label_manager.selected_layer.name
+                )
 
             elif len(self.label_manager.selected_layer.data.shape) == 3:
-                props = measure.regionprops(self.label_manager.selected_layer.data)
+                props = measure.regionprops(
+                    self.label_manager.selected_layer.data
+                )
                 filtered_labels = [
                     p.label
                     for p in props
@@ -155,13 +169,19 @@ class SizeFilterWidget(QWidget):
                 ]
                 mask = functools.reduce(
                     np.logical_or,
-                    (self.label_manager.selected_layer.data == val for val in filtered_labels),
+                    (
+                        self.label_manager.selected_layer.data == val
+                        for val in filtered_labels
+                    ),
                 )
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     np.where(mask, self.label_manager.selected_layer.data, 0),
-                    name=self.label_manager.selected_layer.name + "_sizefiltered",
+                    name=self.label_manager.selected_layer.name
+                    + "_sizefiltered",
                 )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(
+                    self.label_manager.selected_layer.name
+                )
 
             else:
                 print("input should be 3D or 4D array")

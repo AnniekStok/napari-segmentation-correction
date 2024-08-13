@@ -1,4 +1,3 @@
-
 import os
 import shutil
 
@@ -25,7 +24,9 @@ from .layer_manager import LayerManager
 class SmoothingWidget(QWidget):
     """Widget to perform calculations between two images"""
 
-    def __init__(self, viewer: "napari.viewer.Viewer", label_manager: LayerManager) -> None:
+    def __init__(
+        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
+    ) -> None:
         super().__init__()
 
         self.viewer = viewer
@@ -67,7 +68,8 @@ class SmoothingWidget(QWidget):
 
             else:
                 outputdir = os.path.join(
-                    self.outputdir, (self.label_manager.selected_layer.name + "_smoothed")
+                    self.outputdir,
+                    (self.label_manager.selected_layer.name + "_smoothed"),
                 )
                 if os.path.exists(outputdir):
                     shutil.rmtree(outputdir)
@@ -104,12 +106,16 @@ class SmoothingWidget(QWidget):
                     da.stack([imread(fname) for fname in sorted(file_list)]),
                     name=self.label_manager.selected_layer.name + "_smoothed",
                 )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(
+                    self.label_manager.selected_layer.name
+                )
 
         else:
             if len(self.label_manager.selected_layer.data.shape) == 4:
                 stack = []
-                for i in range(self.label_manager.selected_layer.data.shape[0]):
+                for i in range(
+                    self.label_manager.selected_layer.data.shape[0]
+                ):
                     smoothed = ndimage.median_filter(
                         self.label_manager.selected_layer.data[i],
                         size=self.median_radius_field.value(),
@@ -119,16 +125,21 @@ class SmoothingWidget(QWidget):
                     np.stack(stack, axis=0),
                     name=self.label_manager.selected_layer.name + "_smoothed",
                 )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(
+                    self.label_manager.selected_layer.name
+                )
 
             elif len(self.label_manager.selected_layer.data.shape) == 3:
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     ndimage.median_filter(
-                        self.label_manager.selected_layer.data, size=self.median_radius_field.value()
+                        self.label_manager.selected_layer.data,
+                        size=self.median_radius_field.value(),
                     ),
                     name=self.label_manager.selected_layer.name + "_smoothed",
                 )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(
+                    self.label_manager.selected_layer.name
+                )
 
             else:
                 print("input should be a 3D or 4D array")

@@ -8,9 +8,7 @@ from qtpy.QtWidgets import QComboBox
 class LayerDropdown(QComboBox):
     """QComboBox widget with functions for updating the selected layer and to update the list of options when the list of layers is modified."""
 
-    layer_changed = pyqtSignal(
-        str
-    )  # signal to emit the selected layer name
+    layer_changed = pyqtSignal(str)  # signal to emit the selected layer name
 
     def __init__(self, viewer: napari.Viewer, layer_type: Tuple):
         super().__init__()

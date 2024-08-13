@@ -1,4 +1,3 @@
-
 import functools
 
 import dask.array as da
@@ -20,7 +19,9 @@ from .layer_manager import LayerManager
 class PointFilter(QWidget):
     """Use a points layer to remove or keep selected labels"""
 
-    def __init__(self, viewer: "napari.viewer.Viewer", label_manager: LayerManager) -> None:
+    def __init__(
+        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
+    ) -> None:
         super().__init__()
 
         self.viewer = viewer
@@ -51,7 +52,9 @@ class PointFilter(QWidget):
         """Keep only the labels that are selected by the points layer."""
 
         if self.label_manager.selected_layer is not None:
-            if isinstance(self.label_manager.selected_layer.data, da.core.Array):
+            if isinstance(
+                self.label_manager.selected_layer.data, da.core.Array
+            ):
                 tps = np.unique([int(p[0]) for p in self.points.data])
                 for tp in tps:
                     labels_to_keep = []
@@ -69,7 +72,9 @@ class PointFilter(QWidget):
                     )
                     filtered = np.where(mask, current_stack, 0)
                     self.label_manager.selected_layer.data[tp] = filtered
-                self.label_manager.selected_layer.data = self.label_manager.selected_layer.data  # to trigger viewer update
+                self.label_manager.selected_layer.data = (
+                    self.label_manager.selected_layer.data
+                )  # to trigger viewer update
 
             else:
                 if len(self.points.data[0]) == 4:
@@ -86,36 +91,54 @@ class PointFilter(QWidget):
                         mask = functools.reduce(
                             np.logical_or,
                             (
-                                self.label_manager.selected_layer.data[tp] == val
+                                self.label_manager.selected_layer.data[tp]
+                                == val
                                 for val in labels_to_keep
                             ),
                         )
-                        filtered = np.where(mask, self.label_manager.selected_layer.data[tp], 0)
+                        filtered = np.where(
+                            mask, self.label_manager.selected_layer.data[tp], 0
+                        )
                         self.label_manager.selected_layer.data[tp] = filtered
-                    self.label_manager.selected_layer.data = self.label_manager.selected_layer.data  # to trigger viewer update
+                    self.label_manager.selected_layer.data = (
+                        self.label_manager.selected_layer.data
+                    )  # to trigger viewer update
 
                 else:
                     labels_to_keep = []
                     for p in self.points.data:
                         if len(p) == 2:
                             labels_to_keep.append(
-                                self.label_manager.selected_layer.data[int(p[0]), int(p[1])]
+                                self.label_manager.selected_layer.data[
+                                    int(p[0]), int(p[1])
+                                ]
                             )
                         elif len(p) == 3:
                             labels_to_keep.append(
-                                self.label_manager.selected_layer.data[int(p[0]), int(p[1]), int(p[2])]
+                                self.label_manager.selected_layer.data[
+                                    int(p[0]), int(p[1]), int(p[2])
+                                ]
                             )
 
                     mask = functools.reduce(
                         np.logical_or,
-                        (self.label_manager.selected_layer.data == val for val in labels_to_keep),
+                        (
+                            self.label_manager.selected_layer.data == val
+                            for val in labels_to_keep
+                        ),
                     )
-                    filtered = np.where(mask, self.label_manager.selected_layer.data, 0)
+                    filtered = np.where(
+                        mask, self.label_manager.selected_layer.data, 0
+                    )
 
                     self.label_manager.selected_layer = self.viewer.add_labels(
-                        filtered, name=self.label_manager.selected_layer.name + "_points_kept"
+                        filtered,
+                        name=self.label_manager.selected_layer.name
+                        + "_points_kept",
                     )
-                    self.label_manager._update_labels(self.label_manager.selected_layer.name)
+                    self.label_manager._update_labels(
+                        self.label_manager.selected_layer.name
+                    )
 
     def _update_points(self, selected_layer: str) -> None:
         """Update the layer that is set to be the 'points' layer for picking labels."""
@@ -130,7 +153,9 @@ class PointFilter(QWidget):
         """Delete all labels selected by the points layer."""
 
         if self.label_manager.selected_layer is not None:
-            if isinstance(self.label_manager.selected_layer.data, da.core.Array):
+            if isinstance(
+                self.label_manager.selected_layer.data, da.core.Array
+            ):
                 tps = np.unique([int(p[0]) for p in self.points.data])
                 for tp in tps:
                     labels_to_keep = []
@@ -149,7 +174,9 @@ class PointFilter(QWidget):
                     inverse_mask = np.logical_not(mask)
                     filtered = np.where(inverse_mask, current_stack, 0)
                     self.label_manager.selected_layer.data[tp] = filtered
-                self.label_manager.selected_layer.data = self.label_manager.selected_layer.data
+                self.label_manager.selected_layer.data = (
+                    self.label_manager.selected_layer.data
+                )
 
             else:
                 if len(self.points.data[0]) == 4:
@@ -166,25 +193,36 @@ class PointFilter(QWidget):
                         mask = functools.reduce(
                             np.logical_or,
                             (
-                                self.label_manager.selected_layer.data[tp] == val
+                                self.label_manager.selected_layer.data[tp]
+                                == val
                                 for val in labels_to_keep
                             ),
                         )
                         inverse_mask = np.logical_not(mask)
-                        filtered = np.where(inverse_mask, self.label_manager.selected_layer.data[tp], 0)
+                        filtered = np.where(
+                            inverse_mask,
+                            self.label_manager.selected_layer.data[tp],
+                            0,
+                        )
                         self.label_manager.selected_layer.data[tp] = filtered
-                    self.label_manager.selected_layer.data = self.label_manager.selected_layer.data  # to trigger viewer update
+                    self.label_manager.selected_layer.data = (
+                        self.label_manager.selected_layer.data
+                    )  # to trigger viewer update
 
                 else:
                     labels_to_keep = []
                     for p in self.points.data:
                         if len(p) == 2:
                             labels_to_keep.append(
-                                self.label_manager.selected_layer.data[int(p[0]), int(p[1])]
+                                self.label_manager.selected_layer.data[
+                                    int(p[0]), int(p[1])
+                                ]
                             )
                         elif len(p) == 3:
                             labels_to_keep.append(
-                                self.label_manager.selected_layer.data[int(p[0]), int(p[1]), int(p[2])]
+                                self.label_manager.selected_layer.data[
+                                    int(p[0]), int(p[1]), int(p[2])
+                                ]
                             )
                         elif len(p) == 4:
                             labels_to_keep.append(
@@ -195,12 +233,21 @@ class PointFilter(QWidget):
 
                     mask = functools.reduce(
                         np.logical_or,
-                        (self.label_manager.selected_layer.data == val for val in labels_to_keep),
+                        (
+                            self.label_manager.selected_layer.data == val
+                            for val in labels_to_keep
+                        ),
                     )
                     inverse_mask = np.logical_not(mask)
-                    filtered = np.where(inverse_mask, self.label_manager.selected_layer.data, 0)
+                    filtered = np.where(
+                        inverse_mask, self.label_manager.selected_layer.data, 0
+                    )
 
                     self.label_manager.selected_layer = self.viewer.add_labels(
-                        filtered, name=self.label_manager.selected_layer.name + "_points_removed"
+                        filtered,
+                        name=self.label_manager.selected_layer.name
+                        + "_points_removed",
                     )
-                    self.label_manager._update_labels(self.label_manager.selected_layer.name)
+                    self.label_manager._update_labels(
+                        self.label_manager.selected_layer.name
+                    )

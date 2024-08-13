@@ -1,4 +1,3 @@
-
 import dask.array as da
 import napari
 import numpy as np
@@ -86,9 +85,8 @@ class ImageCalculator(QWidget):
     def _calculate_images(self):
         """Add label image 2 to label image 1"""
 
-        if (
-            isinstance(self.image1_layer, da.core.Array)
-            or isinstance(self.image2_layer, da.core.Array)
+        if isinstance(self.image1_layer, da.core.Array) or isinstance(
+            self.image2_layer, da.core.Array
         ):
             msg = QMessageBox()
             msg.setWindowTitle(

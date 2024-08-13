@@ -2,7 +2,6 @@
 Napari plugin widget for editing N-dimensional label data
 """
 
-import functools
 import os
 import shutil
 
@@ -10,34 +9,30 @@ import dask.array as da
 import napari
 import numpy as np
 import tifffile
-from napari.layers import Image, Labels
 from napari_plane_sliders._plane_slider_widget import PlaneSliderWidget
 from qtpy.QtWidgets import (
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QScrollArea,
-    QSpinBox,
     QTabWidget,
     QVBoxLayout,
     QWidget,
 )
-from scipy import ndimage
-from scipy.ndimage import binary_erosion
 from skimage import measure
 from skimage.io import imread
-from skimage.segmentation import expand_labels
 
 from ._custom_table_widget import ColoredTableWidget
-from ._layer_dropdown import LayerDropdown
+from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
 from .layer_manager import LayerManager
 from .point_filter import PointFilter
+from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
+from .threshold_widget import ThresholdWidget
 
 
 class AnnotateLabelsND(QWidget):
@@ -124,24 +119,7 @@ class AnnotateLabelsND(QWidget):
         self.settings_layout.addWidget(copy_labels_box)
 
         ### Add widget for size filtering
-        filterbox = QGroupBox("Filter objects by size")
-        filter_layout = QVBoxLayout()
-
-        label_size = QLabel("Size threshold (voxels)")
-        threshold_size_layout = QHBoxLayout()
-        self.min_size_field = QSpinBox()
-        self.min_size_field.setMaximum(1000000)
-        self.delete_btn = QPushButton("Delete")
-        threshold_size_layout.addWidget(self.min_size_field)
-        threshold_size_layout.addWidget(self.delete_btn)
-
-        filter_layout.addWidget(label_size)
-        filter_layout.addLayout(threshold_size_layout)
-        self.delete_btn.clicked.connect(self._delete_small_objects)
-        self.delete_btn.setEnabled(True)
-
-        filterbox.setLayout(filter_layout)
-        self.settings_layout.addWidget(filterbox)
+        self.settings_layout.addWidget(SizeFilterWidget(self.viewer, self.label_manager))
 
         self.setLayout(self.settings_layout)
 
@@ -150,79 +128,12 @@ class AnnotateLabelsND(QWidget):
         self.settings_layout.addWidget(smooth_widget)
 
         ### Add widget for eroding/dilating labels
-        dil_erode_box = QGroupBox("Erode/dilate labels")
-        dil_erode_box_layout = QVBoxLayout()
-
-        radius_layout = QHBoxLayout()
-        str_element_diameter_label = QLabel("Structuring element diameter")
-        str_element_diameter_label.setFixedWidth(200)
-        self.structuring_element_diameter = QSpinBox()
-        self.structuring_element_diameter.setMaximum(100)
-        self.structuring_element_diameter.setValue(1)
-        radius_layout.addWidget(str_element_diameter_label)
-        radius_layout.addWidget(self.structuring_element_diameter)
-
-        iterations_layout = QHBoxLayout()
-        iterations_label = QLabel("Iterations")
-        iterations_label.setFixedWidth(200)
-        self.iterations = QSpinBox()
-        self.iterations.setMaximum(100)
-        self.iterations.setValue(1)
-        iterations_layout.addWidget(iterations_label)
-        iterations_layout.addWidget(self.iterations)
-
-        shrink_dilate_buttons_layout = QHBoxLayout()
-        self.erode_btn = QPushButton("Erode")
-        self.dilate_btn = QPushButton("Dilate")
-        self.erode_btn.clicked.connect(self._erode_labels)
-        self.dilate_btn.clicked.connect(self._dilate_labels)
-        shrink_dilate_buttons_layout.addWidget(self.erode_btn)
-        shrink_dilate_buttons_layout.addWidget(self.dilate_btn)
-
-        if self.label_manager.selected_layer is not None:
-            self.erode_btn.setEnabled(True)
-            self.dilate_btn.setEnabled(True)
-
-        dil_erode_box_layout.addLayout(radius_layout)
-        dil_erode_box_layout.addLayout(iterations_layout)
-        dil_erode_box_layout.addLayout(shrink_dilate_buttons_layout)
-
-        dil_erode_box.setLayout(dil_erode_box_layout)
-        self.settings_layout.addWidget(dil_erode_box)
+        erode_dilate_widget = ErosionDilationWidget(self.viewer, self.label_manager)
+        self.settings_layout.addWidget(erode_dilate_widget)
 
         ### Threshold image
-        threshold_box = QGroupBox("Threshold")
-        threshold_box_layout = QVBoxLayout()
-
-        self.threshold_layer_dropdown = LayerDropdown(
-            self.viewer, (Image, Labels)
-        )
-        self.threshold_layer_dropdown.layer_changed.connect(
-            self._update_threshold_layer
-        )
-        threshold_box_layout.addWidget(self.threshold_layer_dropdown)
-
-        min_threshold_layout = QHBoxLayout()
-        min_threshold_layout.addWidget(QLabel("Min value"))
-        self.min_threshold = QSpinBox()
-        self.min_threshold.setMaximum(65535)
-        min_threshold_layout.addWidget(self.min_threshold)
-
-        max_threshold_layout = QHBoxLayout()
-        max_threshold_layout.addWidget(QLabel("Max value"))
-        self.max_threshold = QSpinBox()
-        self.max_threshold.setMaximum(65535)
-        self.max_threshold.setValue(65535)
-        max_threshold_layout.addWidget(self.max_threshold)
-
-        threshold_box_layout.addLayout(min_threshold_layout)
-        threshold_box_layout.addLayout(max_threshold_layout)
-        threshold_btn = QPushButton("Run")
-        threshold_btn.clicked.connect(self._threshold)
-        threshold_box_layout.addWidget(threshold_btn)
-
-        threshold_box.setLayout(threshold_box_layout)
-        self.settings_layout.addWidget(threshold_box)
+        threshold_widget = ThresholdWidget(self.viewer)
+        self.settings_layout.addWidget(threshold_widget)
 
         # Add image calculator
         image_calc = ImageCalculator(self.viewer)
@@ -277,14 +188,7 @@ class AnnotateLabelsND(QWidget):
             self.target_labels = self.viewer.layers[selected_layer]
             self.target_label_dropdown.setCurrentText(selected_layer)
 
-    def _update_threshold_layer(self, selected_layer) -> None:
-        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
 
-        if selected_layer == "":
-            self.threshold_layer = None
-        else:
-            self.threshold_layer = self.viewer.layers[selected_layer]
-            self.threshold_layer_dropdown.setCurrentText(selected_layer)
 
     def _convert_to_array(self) -> None:
         """Convert from dask array to in-memory array. This is necessary for manual editing using the label tools (brush, eraser, fill bucket)."""
@@ -669,321 +573,9 @@ class AnnotateLabelsND(QWidget):
                             "copy-pasting in more than 5 dimensions is not supported"
                         )
 
-    def _delete_small_objects(self) -> None:
-        """Delete small objects in the selected layer"""
 
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                msg = QMessageBox()
-                msg.setWindowTitle("No output directory selected")
-                msg.setText("Please specify an output directory first!")
-                msg.setIcon(QMessageBox.Information)
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.exec_()
-                return False
 
-            else:
-                outputdir = os.path.join(
-                    self.outputdir, (self.label_manager.selected_layer.name + "_sizefiltered")
-                )
-                if os.path.exists(outputdir):
-                    shutil.rmtree(outputdir)
-                os.mkdir(outputdir)
 
-                for i in range(
-                    self.label_manager.selected_layer.data.shape[0]
-                ):  # Loop over the first dimension
-                    current_stack = self.label_manager.selected_layer.data[
-                        i
-                    ].compute()  # Compute the current stack
 
-                    # measure the sizes in pixels of the labels in slice using skimage.regionprops
-                    props = measure.regionprops(current_stack)
-                    filtered_labels = [
-                        p.label
-                        for p in props
-                        if p.area > self.min_size_field.value()
-                    ]
-                    mask = functools.reduce(
-                        np.logical_or,
-                        (current_stack == val for val in filtered_labels),
-                    )
-                    filtered = np.where(mask, current_stack, 0)
-                    tifffile.imwrite(
-                        os.path.join(
-                            outputdir,
-                            (
-                                self.label_manager.selected_layer.name
-                                + "_sizefiltered_TP"
-                                + str(i).zfill(4)
-                                + ".tif"
-                            ),
-                        ),
-                        np.array(filtered, dtype="uint16"),
-                    )
-
-                file_list = [
-                    os.path.join(outputdir, fname)
-                    for fname in os.listdir(outputdir)
-                    if fname.endswith(".tif")
-                ]
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.label_manager.selected_layer.name + "_sizefiltered",
-                )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
-
-        else:
-            # Image data is a normal array and can be directly edited.
-            if len(self.label_manager.selected_layer.data.shape) == 4:
-                stack = []
-                for i in range(self.label_manager.selected_layer.data.shape[0]):
-                    props = measure.regionprops(self.label_manager.selected_layer.data[i])
-                    filtered_labels = [
-                        p.label
-                        for p in props
-                        if p.area > self.min_size_field.value()
-                    ]
-                    mask = functools.reduce(
-                        np.logical_or,
-                        (
-                            self.label_manager.selected_layer.data[i] == val
-                            for val in filtered_labels
-                        ),
-                    )
-                    filtered = np.where(mask, self.label_manager.selected_layer.data[i], 0)
-                    stack.append(filtered)
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    np.stack(stack, axis=0),
-                    name=self.label_manager.selected_layer.name + "_sizefiltered",
-                )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
-
-            elif len(self.label_manager.selected_layer.data.shape) == 3:
-                props = measure.regionprops(self.label_manager.selected_layer.data)
-                filtered_labels = [
-                    p.label
-                    for p in props
-                    if p.area > self.min_size_field.value()
-                ]
-                mask = functools.reduce(
-                    np.logical_or,
-                    (self.label_manager.selected_layer.data == val for val in filtered_labels),
-                )
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    np.where(mask, self.label_manager.selected_layer.data, 0),
-                    name=self.label_manager.selected_layer.name + "_sizefiltered",
-                )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
-
-            else:
-                print("input should be 3D or 4D array")
-
-    def _erode_labels(self):
-        """Shrink oversized labels through erosion"""
-
-        diam = self.structuring_element_diameter.value()
-        iterations = self.iterations.value()
-        structuring_element = np.ones(
-            (diam, diam, diam), dtype=bool
-        )  # Define a 3x3x3 structuring element for 3D erosion
-
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                msg = QMessageBox()
-                msg.setWindowTitle("No output directory selected")
-                msg.setText("Please specify an output directory first!")
-                msg.setIcon(QMessageBox.Information)
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.exec_()
-                return False
-
-            else:
-                outputdir = os.path.join(
-                    self.outputdir, (self.label_manager.selected_layer.name + "_eroded")
-                )
-                if os.path.exists(outputdir):
-                    shutil.rmtree(outputdir)
-                os.mkdir(outputdir)
-
-                for i in range(
-                    self.label_manager.selected_layer.data.shape[0]
-                ):  # Loop over the first dimension
-                    current_stack = self.label_manager.selected_layer.data[
-                        i
-                    ].compute()  # Compute the current stack
-                    mask = current_stack > 0
-                    filled_mask = ndimage.binary_fill_holes(mask)
-                    eroded_mask = binary_erosion(
-                        filled_mask,
-                        structure=structuring_element,
-                        iterations=iterations,
-                    )
-                    eroded = np.where(eroded_mask, current_stack, 0)
-                    tifffile.imwrite(
-                        os.path.join(
-                            outputdir,
-                            (
-                                self.label_manager.selected_layer.name
-                                + "_eroded_TP"
-                                + str(i).zfill(4)
-                                + ".tif"
-                            ),
-                        ),
-                        np.array(eroded, dtype="uint16"),
-                    )
-
-                file_list = [
-                    os.path.join(outputdir, fname)
-                    for fname in os.listdir(outputdir)
-                    if fname.endswith(".tif")
-                ]
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.label_manager.selected_layer.name + "_eroded",
-                )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
-                return True
-
-        else:
-            if len(self.label_manager.selected_layer.data.shape) == 4:
-                stack = []
-                for i in range(self.label_manager.selected_layer.data.shape[0]):
-                    mask = self.label_manager.selected_layer.data[i] > 0
-                    filled_mask = ndimage.binary_fill_holes(mask)
-                    eroded_mask = binary_erosion(
-                        filled_mask,
-                        structure=structuring_element,
-                        iterations=iterations,
-                    )
-                    stack.append(np.where(eroded_mask, self.label_manager.selected_layer.data[i], 0))
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    np.stack(stack, axis=0), name=self.label_manager.selected_layer.name + "_eroded"
-                )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
-            elif len(self.label_manager.selected_layer.data.shape) == 3:
-                mask = self.label_manager.selected_layer.data > 0
-                filled_mask = ndimage.binary_fill_holes(mask)
-                eroded_mask = binary_erosion(
-                    filled_mask,
-                    structure=structuring_element,
-                    iterations=iterations,
-                )
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    np.where(eroded_mask, self.label_manager.selected_layer.data, 0),
-                    name=self.label_manager.selected_layer.name + "_eroded",
-                )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
-            else:
-                print("4D or 3D array required!")
-
-    def _dilate_labels(self):
-        """Dilate labels in the selected layer."""
-
-        diam = self.structuring_element_diameter.value()
-        iterations = self.iterations.value()
-
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                msg = QMessageBox()
-                msg.setWindowTitle("No output directory selected")
-                msg.setText("Please specify an output directory first!")
-                msg.setIcon(QMessageBox.Information)
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.exec_()
-                return False
-
-            else:
-                outputdir = os.path.join(
-                    self.outputdir, (self.label_manager.selected_layer.name + "_dilated")
-                )
-                if os.path.exists(outputdir):
-                    shutil.rmtree(outputdir)
-                os.mkdir(outputdir)
-
-                for i in range(
-                    self.label_manager.selected_layer.data.shape[0]
-                ):  # Loop over the first dimension
-                    expanded_labels = self.label_manager.selected_layer.data[
-                        i
-                    ].compute()  # Compute the current stack
-                    for _j in range(iterations):
-                        expanded_labels = expand_labels(
-                            expanded_labels, distance=diam
-                        )
-                    tifffile.imwrite(
-                        os.path.join(
-                            outputdir,
-                            (
-                                self.label_manager.selected_layer.name
-                                + "_dilated_TP"
-                                + str(i).zfill(4)
-                                + ".tif"
-                            ),
-                        ),
-                        np.array(expanded_labels, dtype="uint16"),
-                    )
-
-                file_list = [
-                    os.path.join(outputdir, fname)
-                    for fname in os.listdir(outputdir)
-                    if fname.endswith(".tif")
-                ]
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.label_manager.selected_layer.name + "_dilated",
-                )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
-                return True
-
-        else:
-            if len(self.label_manager.selected_layer.data.shape) == 4:
-                stack = []
-                for i in range(self.label_manager.selected_layer.data.shape[0]):
-                    expanded_labels = self.label_manager.selected_layer.data[i]
-                    for _j in range(iterations):
-                        expanded_labels = expand_labels(
-                            expanded_labels, distance=diam
-                        )
-                    stack.append(expanded_labels)
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    np.stack(stack, axis=0), name=self.label_manager.selected_layer.name + "_dilated"
-                )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
-
-            elif len(self.label_manager.selected_layer.data.shape) == 3:
-                expanded_labels = self.label_manager.selected_layer.data
-                for _i in range(iterations):
-                    expanded_labels = expand_labels(
-                        expanded_labels, distance=diam
-                    )
-
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    expanded_labels, name=self.label_manager.selected_layer.name + "_dilated"
-                )
-                self.label_manager._update_labels(self.label_manager.selected_layer.name)
-            else:
-                print("input should be a 3D or 4D stack")
-
-    def _threshold(self):
-        """Threshold the selected label or intensity image"""
-
-        if isinstance(self.threshold_layer.data, da.core.Array):
-            msg = QMessageBox()
-            msg.setWindowTitle(
-                "Thresholding not yet implemented for dask arrays"
-            )
-            msg.setText("Thresholding not yet implemented for dask arrays")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-
-        thresholded = (
-            self.threshold_layer.data >= int(self.min_threshold.value())
-        ) & (self.threshold_layer.data <= int(self.max_threshold.value()))
-        self.viewer.add_labels(
-            thresholded, name=self.threshold_layer.name + "_thresholded"
-        )
 
 

@@ -5,17 +5,14 @@ Napari plugin widget for editing N-dimensional label data
 import functools
 import os
 import shutil
-from typing import Tuple
 
 import dask.array as da
 import napari
 import numpy as np
 import tifffile
-from napari.layers import Image, Labels, Points
+from napari.layers import Image, Labels
 from napari_plane_sliders._plane_slider_widget import PlaneSliderWidget
-from PyQt5.QtCore import pyqtSignal
 from qtpy.QtWidgets import (
-    QComboBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -37,6 +34,9 @@ from skimage.segmentation import expand_labels
 
 from ._custom_table_widget import ColoredTableWidget
 from ._layer_dropdown import LayerDropdown
+from .image_calculator import ImageCalculator
+from .point_filter import PointFilter
+from .layer_manager import LayerManager
 
 class AnnotateLabelsND(QWidget):
     """Widget for manual correction of label data, for example to prepare ground truth data for training a segmentation model"""
@@ -45,7 +45,6 @@ class AnnotateLabelsND(QWidget):
         super().__init__()
         self.viewer = viewer
 
-        self.labels = None
         self.source_labels = None
         self.target_labels = None
         self.table = None
@@ -66,14 +65,13 @@ class AnnotateLabelsND(QWidget):
         self.settings_layout.addLayout(outputbox_layout)
 
         ### create the dropdown for selecting label images
-        self.label_dropdown = LayerDropdown(self.viewer, (Labels))
-        self.label_dropdown.layer_changed.connect(self._update_labels)
-        self.settings_layout.addWidget(self.label_dropdown)
+        self.label_manager = LayerManager(self.viewer)
+        self.settings_layout.addWidget(self.label_manager)
 
         ### Add option to convert dask array to in-memory array
         self.convert_to_array_btn = QPushButton("Convert to in-memory array")
         self.convert_to_array_btn.setEnabled(
-            self.labels is not None and isinstance(self.labels.data, da.core.Array)
+            self.label_manager.selected_layer is not None and isinstance(self.label_manager.selected_layer.data, da.core.Array)
         )
         self.convert_to_array_btn.clicked.connect(self._convert_to_array)
         self.settings_layout.addWidget(self.convert_to_array_btn)
@@ -84,7 +82,7 @@ class AnnotateLabelsND(QWidget):
         self.table_btn.clicked.connect(
             lambda: self.tab_widget.setCurrentIndex(0)
         )
-        if self.labels is not None:
+        if self.label_manager.selected_layer is not None:
             self.table_btn.setEnabled(True)
         self.settings_layout.addWidget(self.table_btn)
 
@@ -99,24 +97,8 @@ class AnnotateLabelsND(QWidget):
         self.settings_layout.addWidget(self.clear_btn)
 
         ### Add widget for filtering by points layer
-        point_filter_box = QGroupBox("Select objects with points")
-        point_filter_layout = QVBoxLayout()
-        self.point_dropdown = LayerDropdown(self.viewer, (Points))
-        self.point_dropdown.layer_changed.connect(self._update_points)
-
-        remove_keep_btn_layout = QHBoxLayout()
-        self.keep_pts_btn = QPushButton("Keep")
-        self.keep_pts_btn.clicked.connect(self._keep_objects)
-        self.remove_pts_btn = QPushButton("Remove")
-        self.remove_pts_btn.clicked.connect(self._delete_objects)
-        remove_keep_btn_layout.addWidget(self.keep_pts_btn)
-        remove_keep_btn_layout.addWidget(self.remove_pts_btn)
-
-        point_filter_layout.addWidget(self.point_dropdown)
-        point_filter_layout.addLayout(remove_keep_btn_layout)
-
-        point_filter_box.setLayout(point_filter_layout)
-        self.settings_layout.addWidget(point_filter_box)
+        point_filter = PointFilter(self.viewer, self.label_manager)
+        self.settings_layout.addWidget(point_filter)
 
         ### Add widget for copy-pasting labels from one layer to another
         copy_labels_box = QGroupBox("Copy-paste labels")
@@ -211,7 +193,7 @@ class AnnotateLabelsND(QWidget):
         shrink_dilate_buttons_layout.addWidget(self.erode_btn)
         shrink_dilate_buttons_layout.addWidget(self.dilate_btn)
 
-        if self.labels is not None:
+        if self.label_manager.selected_layer is not None:
             self.erode_btn.setEnabled(True)
             self.dilate_btn.setEnabled(True)
 
@@ -256,43 +238,9 @@ class AnnotateLabelsND(QWidget):
         threshold_box.setLayout(threshold_box_layout)
         self.settings_layout.addWidget(threshold_box)
 
-        ### Add one image to another
-        image_calc_box = QGroupBox("Image calculator")
-        image_calc_box_layout = QVBoxLayout()
-
-        image1_layout = QHBoxLayout()
-        image1_layout.addWidget(QLabel("Label image 1"))
-        self.image1_dropdown = LayerDropdown(self.viewer, (Image, Labels))
-        self.image1_dropdown.layer_changed.connect(self._update_image1)
-        image1_layout.addWidget(self.image1_dropdown)
-
-        image2_layout = QHBoxLayout()
-        image2_layout.addWidget(QLabel("Label image 2"))
-        self.image2_dropdown = LayerDropdown(self.viewer, (Image, Labels))
-        self.image2_dropdown.layer_changed.connect(self._update_image2)
-        image2_layout.addWidget(self.image2_dropdown)
-
-        image_calc_box_layout.addLayout(image1_layout)
-        image_calc_box_layout.addLayout(image2_layout)
-
-        operation_layout = QHBoxLayout()
-        self.operation = QComboBox()
-        self.operation.addItem("Add")
-        self.operation.addItem("Subtract")
-        self.operation.addItem("Multiply")
-        self.operation.addItem("Divide")
-        self.operation.addItem("AND")
-        self.operation.addItem("OR")
-        operation_layout.addWidget(QLabel("Operation"))
-        operation_layout.addWidget(self.operation)
-        image_calc_box_layout.addLayout(operation_layout)
-
-        add_images_btn = QPushButton("Run")
-        add_images_btn.clicked.connect(self._calculate_images)
-        image_calc_box_layout.addWidget(add_images_btn)
-
-        image_calc_box.setLayout(image_calc_box_layout)
-        self.settings_layout.addWidget(image_calc_box)
+        # Add image calculator
+        image_calc = ImageCalculator(self.viewer)
+        self.settings_layout.addWidget(image_calc)
 
         ## add plane viewing widget
         self.slider_table_widget = QWidget()
@@ -324,17 +272,6 @@ class AnnotateLabelsND(QWidget):
             self.output_path.setText(path)
             self.outputdir = str(self.output_path.text())
 
-    def _update_labels(self, selected_layer) -> None:
-        """Update the layer that is set to be the 'labels' layer that is being edited."""
-
-        if selected_layer == "":
-            self.labels = None
-        else:
-            self.labels = self.viewer.layers[selected_layer]
-            self.label_dropdown.setCurrentText(selected_layer)
-            self.convert_to_array_btn.setEnabled(
-                isinstance(self.labels.data, da.core.Array)
-            )
 
     def _update_source_labels(self, selected_layer) -> None:
         """Update the layer that is set to be the 'source labels' layer for copying labels from."""
@@ -353,25 +290,7 @@ class AnnotateLabelsND(QWidget):
         else:
             self.target_labels = self.viewer.layers[selected_layer]
             self.target_label_dropdown.setCurrentText(selected_layer)
-
-    def _update_points(self, selected_layer: str) -> None:
-        """Update the layer that is set to be the 'points' layer for picking labels."""
-
-        if selected_layer == "":
-            self.points = None
-        else:
-            self.points = self.viewer.layers[selected_layer]
-            self.point_dropdown.setCurrentText(selected_layer)
-
-    def _update_copy_points(self, selected_layer: str) -> None:
-        """Update the layer that is set to be the 'points' layer for copying labels from one layer to another."""
-
-        if selected_layer == "":
-            self.copy_points = None
-        else:
-            self.copy_points = self.viewer.layers[selected_layer]
-            self.copy_point_dropdown.setCurrentText(selected_layer)
-
+ 
     def _update_threshold_layer(self, selected_layer) -> None:
         """Update the layer that is set to be the 'source labels' layer for copying labels from."""
 
@@ -381,70 +300,52 @@ class AnnotateLabelsND(QWidget):
             self.threshold_layer = self.viewer.layers[selected_layer]
             self.threshold_layer_dropdown.setCurrentText(selected_layer)
 
-    def _update_image1(self, selected_layer) -> None:
-        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
-
-        if selected_layer == "":
-            self.image1_layer = None
-        else:
-            self.image1_layer = self.viewer.layers[selected_layer]
-            self.image1_dropdown.setCurrentText(selected_layer)
-
-    def _update_image2(self, selected_layer) -> None:
-        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
-
-        if selected_layer == "":
-            self.image2_layer = None
-        else:
-            self.image2_layer = self.viewer.layers[selected_layer]
-            self.image2_dropdown.setCurrentText(selected_layer)
-
     def _convert_to_array(self) -> None:
         """Convert from dask array to in-memory array. This is necessary for manual editing using the label tools (brush, eraser, fill bucket)."""
 
-        if isinstance(self.labels.data, da.core.Array):
+        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
             stack = []
-            for i in range(self.labels.data.shape[0]):
-                current_stack = self.labels.data[i].compute()
+            for i in range(self.label_manager.selected_layer.data.shape[0]):
+                current_stack = self.label_manager.selected_layer.data[i].compute()
                 stack.append(current_stack)
-            self.labels.data = np.stack(stack, axis=0)
+            self.label_manager.selected_layer.data = np.stack(stack, axis=0)
 
     def _create_summary_table(self) -> None:
         """Create table displaying the sizes of the different labels in the current stack"""
 
-        if isinstance(self.labels.data, da.core.Array):
+        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
             tp = self.viewer.dims.current_step[0]
-            current_stack = self.labels.data[
+            current_stack = self.label_manager.selected_layer.data[
                 tp
             ].compute()  # Compute the current stack
             props = measure.regionprops_table(
                 current_stack, properties=["label", "area", "centroid"]
             )
-            if hasattr(self.labels, "properties"):
-                self.labels.properties = props
-            if hasattr(self.labels, "features"):
-                self.labels.features = props
+            if hasattr(self.label_manager.selected_layer, "properties"):
+                self.label_manager.selected_layer.properties = props
+            if hasattr(self.label_manager.selected_layer, "features"):
+                self.label_manager.selected_layer.features = props
 
         else:
-            if len(self.labels.data.shape) == 4:
+            if len(self.label_manager.selected_layer.data.shape) == 4:
                 tp = self.viewer.dims.current_step[0]
                 props = measure.regionprops_table(
-                    self.labels.data[tp],
+                    self.label_manager.selected_layer.data[tp],
                     properties=["label", "area", "centroid"],
                 )
-                if hasattr(self.labels, "properties"):
-                    self.labels.properties = props
-                if hasattr(self.labels, "features"):
-                    self.labels.features = props
+                if hasattr(self.label_manager.selected_layer, "properties"):
+                    self.label_manager.selected_layer.properties = props
+                if hasattr(self.label_manager.selected_layer, "features"):
+                    self.label_manager.selected_layer.features = props
 
-            elif len(self.labels.data.shape) == 3:
+            elif len(self.label_manager.selected_layer.data.shape) == 3:
                 props = measure.regionprops_table(
-                    self.labels.data, properties=["label", "area", "centroid"]
+                    self.label_manager.selected_layer.data, properties=["label", "area", "centroid"]
                 )
-                if hasattr(self.labels, "properties"):
-                    self.labels.properties = props
-                if hasattr(self.labels, "features"):
-                    self.labels.features = props
+                if hasattr(self.label_manager.selected_layer, "properties"):
+                    self.label_manager.selected_layer.properties = props
+                if hasattr(self.label_manager.selected_layer, "features"):
+                    self.label_manager.selected_layer.features = props
             else:
                 print("input should be a 3D or 4D array")
                 self.table = None
@@ -454,7 +355,7 @@ class AnnotateLabelsND(QWidget):
             self.table.hide()
 
         if self.viewer is not None:
-            self.table = ColoredTableWidget(self.labels, self.viewer)
+            self.table = ColoredTableWidget(self.label_manager.selected_layer, self.viewer)
             self.table._set_label_colors_to_rows()
             self.table.setMinimumWidth(500)
             self.plane_slider_table_layout.addWidget(self.table)
@@ -462,7 +363,7 @@ class AnnotateLabelsND(QWidget):
     def _save_labels(self) -> None:
         """Save the currently active labels layer. If it consists of multiple timepoints, they are written to multiple 3D stacks."""
 
-        if isinstance(self.labels.data, da.core.Array):
+        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
 
             if self.outputdir is None:
                 msg = QMessageBox()
@@ -475,23 +376,23 @@ class AnnotateLabelsND(QWidget):
 
             else:
                 outputdir = os.path.join(
-                    self.outputdir, (self.labels.name + "_finalresult")
+                    self.outputdir, (self.label_manager.selected_layer.name + "_finalresult")
                 )
                 if os.path.exists(outputdir):
                     shutil.rmtree(outputdir)
                 os.mkdir(outputdir)
 
                 for i in range(
-                    self.labels.data.shape[0]
+                    self.label_manager.selected_layer.data.shape[0]
                 ):  # Loop over the first dimension
-                    current_stack = self.labels.data[
+                    current_stack = self.label_manager.selected_layer.data[
                         i
                     ].compute()  # Compute the current stack
                     tifffile.imwrite(
                         os.path.join(
                             outputdir,
                             (
-                                self.labels.name
+                                self.label_manager.selected_layer.name
                                 + "_TP"
                                 + str(i).zfill(4)
                                 + ".tif"
@@ -501,14 +402,14 @@ class AnnotateLabelsND(QWidget):
                     )
                 return True
 
-        elif len(self.labels.data.shape) == 4:
+        elif len(self.label_manager.selected_layer.data.shape) == 4:
             filename, _ = QFileDialog.getSaveFileName(
                 caption="Save Labels",
                 directory="",
                 filter="TIFF files (*.tif *.tiff)",
             )
-            for i in range(self.labels.data.shape[0]):
-                labels_data = self.labels.data[i].astype(np.uint16)
+            for i in range(self.label_manager.selected_layer.data.shape[0]):
+                labels_data = self.label_manager.selected_layer.data[i].astype(np.uint16)
                 tifffile.imwrite(
                     (
                         filename.split(".tif")[0]
@@ -519,7 +420,7 @@ class AnnotateLabelsND(QWidget):
                     labels_data,
                 )
 
-        elif len(self.labels.data.shape) == 3:
+        elif len(self.label_manager.selected_layer.data.shape) == 3:
             filename, _ = QFileDialog.getSaveFileName(
                 caption="Save Labels",
                 directory="",
@@ -527,7 +428,7 @@ class AnnotateLabelsND(QWidget):
             )
 
             if filename:
-                labels_data = self.labels.data.astype(np.uint16)
+                labels_data = self.label_manager.selected_layer.data.astype(np.uint16)
                 tifffile.imwrite(filename, labels_data)
 
         else:
@@ -542,153 +443,6 @@ class AnnotateLabelsND(QWidget):
             self.settings_layout.update()
 
         self.viewer.layers.clear()
-
-    def _keep_objects(self) -> None:
-        """Keep only the labels that are selected by the points layer."""
-
-        if isinstance(self.labels.data, da.core.Array):
-            tps = np.unique([int(p[0]) for p in self.points.data])
-            for tp in tps:
-                labels_to_keep = []
-                points = [p for p in self.points.data if p[0] == tp]
-                current_stack = self.labels.data[
-                    tp
-                ].compute()  # Compute the current stack
-                for p in points:
-                    labels_to_keep.append(
-                        current_stack[int(p[1]), int(p[2]), int(p[3])]
-                    )
-                mask = functools.reduce(
-                    np.logical_or,
-                    (current_stack == val for val in labels_to_keep),
-                )
-                filtered = np.where(mask, current_stack, 0)
-                self.labels.data[tp] = filtered
-            self.labels.data = self.labels.data  # to trigger viewer update
-
-        else:
-            if len(self.points.data[0]) == 4:
-                tps = np.unique([int(p[0]) for p in self.points.data])
-                for tp in tps:
-                    labels_to_keep = []
-                    points = [p for p in self.points.data if p[0] == tp]
-                    for p in points:
-                        labels_to_keep.append(
-                            self.labels.data[
-                                tp, int(p[1]), int(p[2]), int(p[3])
-                            ]
-                        )
-                    mask = functools.reduce(
-                        np.logical_or,
-                        (
-                            self.labels.data[tp] == val
-                            for val in labels_to_keep
-                        ),
-                    )
-                    filtered = np.where(mask, self.labels.data[tp], 0)
-                    self.labels.data[tp] = filtered
-                self.labels.data = self.labels.data  # to trigger viewer update
-
-            else:
-                labels_to_keep = []
-                for p in self.points.data:
-                    if len(p) == 2:
-                        labels_to_keep.append(
-                            self.labels.data[int(p[0]), int(p[1])]
-                        )
-                    elif len(p) == 3:
-                        labels_to_keep.append(
-                            self.labels.data[int(p[0]), int(p[1]), int(p[2])]
-                        )
-
-                mask = functools.reduce(
-                    np.logical_or,
-                    (self.labels.data == val for val in labels_to_keep),
-                )
-                filtered = np.where(mask, self.labels.data, 0)
-
-                self.labels = self.viewer.add_labels(
-                    filtered, name=self.labels.name + "_points_kept"
-                )
-                self._update_labels(self.labels.name)
-
-    def _delete_objects(self) -> None:
-        """Delete all labels selected by the points layer."""
-
-        if isinstance(self.labels.data, da.core.Array):
-            tps = np.unique([int(p[0]) for p in self.points.data])
-            for tp in tps:
-                labels_to_keep = []
-                points = [p for p in self.points.data if p[0] == tp]
-                current_stack = self.labels.data[
-                    tp
-                ].compute()  # Compute the current stack
-                for p in points:
-                    labels_to_keep.append(
-                        current_stack[int(p[1]), int(p[2]), int(p[3])]
-                    )
-                mask = functools.reduce(
-                    np.logical_or,
-                    (current_stack == val for val in labels_to_keep),
-                )
-                inverse_mask = np.logical_not(mask)
-                filtered = np.where(inverse_mask, current_stack, 0)
-                self.labels.data[tp] = filtered
-            self.labels.data = self.labels.data
-
-        else:
-            if len(self.points.data[0]) == 4:
-                tps = np.unique([int(p[0]) for p in self.points.data])
-                for tp in tps:
-                    labels_to_keep = []
-                    points = [p for p in self.points.data if p[0] == tp]
-                    for p in points:
-                        labels_to_keep.append(
-                            self.labels.data[
-                                tp, int(p[1]), int(p[2]), int(p[3])
-                            ]
-                        )
-                    mask = functools.reduce(
-                        np.logical_or,
-                        (
-                            self.labels.data[tp] == val
-                            for val in labels_to_keep
-                        ),
-                    )
-                    inverse_mask = np.logical_not(mask)
-                    filtered = np.where(inverse_mask, self.labels.data[tp], 0)
-                    self.labels.data[tp] = filtered
-                self.labels.data = self.labels.data  # to trigger viewer update
-
-            else:
-                labels_to_keep = []
-                for p in self.points.data:
-                    if len(p) == 2:
-                        labels_to_keep.append(
-                            self.labels.data[int(p[0]), int(p[1])]
-                        )
-                    elif len(p) == 3:
-                        labels_to_keep.append(
-                            self.labels.data[int(p[0]), int(p[1]), int(p[2])]
-                        )
-                    elif len(p) == 4:
-                        labels_to_keep.append(
-                            self.labels.data[
-                                int(p[0]), int(p[1]), int(p[2], int(p[3]))
-                            ]
-                        )
-
-                mask = functools.reduce(
-                    np.logical_or,
-                    (self.labels.data == val for val in labels_to_keep),
-                )
-                inverse_mask = np.logical_not(mask)
-                filtered = np.where(inverse_mask, self.labels.data, 0)
-
-                self.labels = self.viewer.add_labels(
-                    filtered, name=self.labels.name + "_points_removed"
-                )
-                self._update_labels(self.labels.name)
 
     def _add_option_layer(self):
         """Add a new labels layer that contains different alternative segmentations as channels, and add a function to select and copy these cells through shift-clicking"""
@@ -766,45 +520,45 @@ class AnnotateLabelsND(QWidget):
                     == selected_label
                 )
 
-                if isinstance(self.labels.data, da.core.Array):
-                    target_stack = self.labels.data[coords[-4]].compute()
+                if isinstance(self.label_manager.selected_layer.data, da.core.Array):
+                    target_stack = self.label_manager.selected_layer.data[coords[-4]].compute()
                     orig_label = target_stack[
                         coords[-3], coords[-2], coords[-1]
                     ]
                     if orig_label != 0:
                         target_stack[target_stack == orig_label] = 0
                     target_stack[mask] = np.max(target_stack) + 1
-                    self.labels.data[coords[-4]] = target_stack
-                    self.labels.data = self.labels.data
+                    self.label_manager.selected_layer.data[coords[-4]] = target_stack
+                    self.label_manager.selected_layer.data = self.label_manager.selected_layer.data
 
                 else:
-                    if len(self.labels.data.shape) == 3:
-                        orig_label = self.labels.data[
+                    if len(self.label_manager.selected_layer.data.shape) == 3:
+                        orig_label = self.label_manager.selected_layer.data[
                             coords[-3], coords[-2], coords[-1]
                         ]
 
                         if orig_label != 0:
-                            self.labels.data[
-                                self.labels.data == orig_label
+                            self.label_manager.selected_layer.data[
+                                self.label_manager.selected_layer.data == orig_label
                             ] = 0  # set the original label to zero
-                        self.labels.data[mask] = np.max(self.labels.data) + 1
-                        self.labels.data = self.labels.data
+                        self.label_manager.selected_layer.data[mask] = np.max(self.label_manager.selected_layer.data) + 1
+                        self.label_manager.selected_layer.data = self.label_manager.selected_layer.data
 
-                    elif len(self.labels.data.shape) == 4:
-                        orig_label = self.labels.data[
+                    elif len(self.label_manager.selected_layer.data.shape) == 4:
+                        orig_label = self.label_manager.selected_layer.data[
                             coords[-4], coords[-3], coords[-2], coords[-1]
                         ]
 
                         if orig_label != 0:
-                            self.labels.data[coords[-4]][
-                                self.labels.data[coords[-4]] == orig_label
+                            self.label_manager.selected_layer.data[coords[-4]][
+                                self.label_manager.selected_layer.data[coords[-4]] == orig_label
                             ] = 0  # set the original label to zero
-                        self.labels.data[coords[-4]][mask] = (
-                            np.max(self.labels.data) + 1
+                        self.label_manager.selected_layer.data[coords[-4]][mask] = (
+                            np.max(self.label_manager.selected_layer.data) + 1
                         )
-                        self.labels.data = self.labels.data
+                        self.label_manager.selected_layer.data = self.label_manager.selected_layer.data
 
-                    elif len(self.labels.data.shape) == 5:
+                    elif len(self.label_manager.selected_layer.data.shape) == 5:
                         msg_box = QMessageBox()
                         msg_box.setIcon(QMessageBox.Question)
                         msg_box.setText(
@@ -818,7 +572,7 @@ class AnnotateLabelsND(QWidget):
                         msg_box.exec_()
 
                         if msg_box.clickedButton() == yes_button:
-                            self.labels.data = self.labels.data[0]
+                            self.label_manager.selected_layer.data = self.label_manager.selected_layer.data[0]
                         elif msg_box.clickedButton() == no_button:
                             return False
                     else:
@@ -828,25 +582,25 @@ class AnnotateLabelsND(QWidget):
 
     def _convert_to_option_layer(self) -> None:
 
-        if len(self.labels.data.shape) == 3:
+        if len(self.label_manager.selected_layer.data.shape) == 3:
             self.option_labels = self.viewer.add_labels(
-                self.labels.data.reshape(
+                self.label_manager.selected_layer.data.reshape(
                     (
                         1,
                         1,
                     )
-                    + self.labels.data.shape
+                    + self.label_manager.selected_layer.data.shape
                 ),
                 name="label options",
             )
-        elif len(self.labels.data.shape) == 4:
+        elif len(self.label_manager.selected_layer.data.shape) == 4:
             self.option_labels = self.viewer.add_labels(
-                self.labels.data.reshape((1,) + self.labels.data.shape),
+                self.label_manager.selected_layer.data.reshape((1,) + self.label_manager.selected_layer.data.shape),
                 name="label options",
             )
-        elif len(self.labels.data.shape) == 5:
+        elif len(self.label_manager.selected_layer.data.shape) == 5:
             self.option_labels = self.viewer.add_labels(
-                self.labels.data, name="label options"
+                self.label_manager.selected_layer.data, name="label options"
             )
         else:
             print("labels data must have at least 3 dimensions")
@@ -869,45 +623,45 @@ class AnnotateLabelsND(QWidget):
                     == selected_label
                 )
 
-                if isinstance(self.labels.data, da.core.Array):
-                    target_stack = self.labels.data[coords[-4]].compute()
+                if isinstance(self.label_manager.selected_layer.data, da.core.Array):
+                    target_stack = self.label_manager.selected_layer.data[coords[-4]].compute()
                     orig_label = target_stack[
                         coords[-3], coords[-2], coords[-1]
                     ]
                     if orig_label != 0:
                         target_stack[target_stack == orig_label] = 0
                     target_stack[mask] = np.max(target_stack) + 1
-                    self.labels.data[coords[-4]] = target_stack
-                    self.labels.data = self.labels.data
+                    self.label_manager.selected_layer.data[coords[-4]] = target_stack
+                    self.label_manager.selected_layer.data = self.label_manager.selected_layer.data
 
                 else:
-                    if len(self.labels.data.shape) == 3:
-                        orig_label = self.labels.data[
+                    if len(self.label_manager.selected_layer.data.shape) == 3:
+                        orig_label = self.label_manager.selected_layer.data[
                             coords[-3], coords[-2], coords[-1]
                         ]
 
                         if orig_label != 0:
-                            self.labels.data[
-                                self.labels.data == orig_label
+                            self.label_manager.selected_layer.data[
+                                self.label_manager.selected_layer.data == orig_label
                             ] = 0  # set the original label to zero
-                        self.labels.data[mask] = np.max(self.labels.data) + 1
-                        self.labels.data = self.labels.data
+                        self.label_manager.selected_layer.data[mask] = np.max(self.label_manager.selected_layer.data) + 1
+                        self.label_manager.selected_layer.data = self.label_manager.selected_layer.data
 
-                    elif len(self.labels.data.shape) == 4:
-                        orig_label = self.labels.data[
+                    elif len(self.label_manager.selected_layer.data.shape) == 4:
+                        orig_label = self.label_manager.selected_layer.data[
                             coords[-4], coords[-3], coords[-2], coords[-1]
                         ]
 
                         if orig_label != 0:
-                            self.labels.data[coords[-4]][
-                                self.labels.data[coords[-4]] == orig_label
+                            self.label_manager.selected_layer.data[coords[-4]][
+                                self.label_manager.selected_layer.data[coords[-4]] == orig_label
                             ] = 0  # set the original label to zero
-                        self.labels.data[coords[-4]][mask] = (
-                            np.max(self.labels.data) + 1
+                        self.label_manager.selected_layer.data[coords[-4]][mask] = (
+                            np.max(self.label_manager.selected_layer.data) + 1
                         )
-                        self.labels.data = self.labels.data
+                        self.label_manager.selected_layer.data = self.label_manager.selected_layer.data
 
-                    elif len(self.labels.data.shape) == 5:
+                    elif len(self.label_manager.selected_layer.data.shape) == 5:
                         msg_box = QMessageBox()
                         msg_box.setIcon(QMessageBox.Question)
                         msg_box.setText(
@@ -921,7 +675,7 @@ class AnnotateLabelsND(QWidget):
                         msg_box.exec_()
 
                         if msg_box.clickedButton() == yes_button:
-                            self.labels.data = self.labels.data[0]
+                            self.label_manager.selected_layer.data = self.label_manager.selected_layer.data[0]
                         elif msg_box.clickedButton() == no_button:
                             return False
                     else:
@@ -932,7 +686,7 @@ class AnnotateLabelsND(QWidget):
     def _delete_small_objects(self) -> None:
         """Delete small objects in the selected layer"""
 
-        if isinstance(self.labels.data, da.core.Array):
+        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
             if self.outputdir is None:
                 msg = QMessageBox()
                 msg.setWindowTitle("No output directory selected")
@@ -944,16 +698,16 @@ class AnnotateLabelsND(QWidget):
 
             else:
                 outputdir = os.path.join(
-                    self.outputdir, (self.labels.name + "_sizefiltered")
+                    self.outputdir, (self.label_manager.selected_layer.name + "_sizefiltered")
                 )
                 if os.path.exists(outputdir):
                     shutil.rmtree(outputdir)
                 os.mkdir(outputdir)
 
                 for i in range(
-                    self.labels.data.shape[0]
+                    self.label_manager.selected_layer.data.shape[0]
                 ):  # Loop over the first dimension
-                    current_stack = self.labels.data[
+                    current_stack = self.label_manager.selected_layer.data[
                         i
                     ].compute()  # Compute the current stack
 
@@ -973,7 +727,7 @@ class AnnotateLabelsND(QWidget):
                         os.path.join(
                             outputdir,
                             (
-                                self.labels.name
+                                self.label_manager.selected_layer.name
                                 + "_sizefiltered_TP"
                                 + str(i).zfill(4)
                                 + ".tif"
@@ -987,18 +741,18 @@ class AnnotateLabelsND(QWidget):
                     for fname in os.listdir(outputdir)
                     if fname.endswith(".tif")
                 ]
-                self.labels = self.viewer.add_labels(
+                self.label_manager.selected_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.labels.name + "_sizefiltered",
+                    name=self.label_manager.selected_layer.name + "_sizefiltered",
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
 
         else:
             # Image data is a normal array and can be directly edited.
-            if len(self.labels.data.shape) == 4:
+            if len(self.label_manager.selected_layer.data.shape) == 4:
                 stack = []
-                for i in range(self.labels.data.shape[0]):
-                    props = measure.regionprops(self.labels.data[i])
+                for i in range(self.label_manager.selected_layer.data.shape[0]):
+                    props = measure.regionprops(self.label_manager.selected_layer.data[i])
                     filtered_labels = [
                         p.label
                         for p in props
@@ -1007,20 +761,20 @@ class AnnotateLabelsND(QWidget):
                     mask = functools.reduce(
                         np.logical_or,
                         (
-                            self.labels.data[i] == val
+                            self.label_manager.selected_layer.data[i] == val
                             for val in filtered_labels
                         ),
                     )
-                    filtered = np.where(mask, self.labels.data[i], 0)
+                    filtered = np.where(mask, self.label_manager.selected_layer.data[i], 0)
                     stack.append(filtered)
-                self.labels = self.viewer.add_labels(
+                self.label_manager.selected_layer = self.viewer.add_labels(
                     np.stack(stack, axis=0),
-                    name=self.labels.name + "_sizefiltered",
+                    name=self.label_manager.selected_layer.name + "_sizefiltered",
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
 
-            elif len(self.labels.data.shape) == 3:
-                props = measure.regionprops(self.labels.data)
+            elif len(self.label_manager.selected_layer.data.shape) == 3:
+                props = measure.regionprops(self.label_manager.selected_layer.data)
                 filtered_labels = [
                     p.label
                     for p in props
@@ -1028,13 +782,13 @@ class AnnotateLabelsND(QWidget):
                 ]
                 mask = functools.reduce(
                     np.logical_or,
-                    (self.labels.data == val for val in filtered_labels),
+                    (self.label_manager.selected_layer.data == val for val in filtered_labels),
                 )
-                self.labels = self.viewer.add_labels(
-                    np.where(mask, self.labels.data, 0),
-                    name=self.labels.name + "_sizefiltered",
+                self.label_manager.selected_layer = self.viewer.add_labels(
+                    np.where(mask, self.label_manager.selected_layer.data, 0),
+                    name=self.label_manager.selected_layer.name + "_sizefiltered",
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
 
             else:
                 print("input should be 3D or 4D array")
@@ -1042,7 +796,7 @@ class AnnotateLabelsND(QWidget):
     def _smooth_objects(self) -> None:
         """Smooth objects by using a median filter."""
 
-        if isinstance(self.labels.data, da.core.Array):
+        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
             if self.outputdir is None:
                 msg = QMessageBox()
                 msg.setWindowTitle("No output directory selected")
@@ -1054,16 +808,16 @@ class AnnotateLabelsND(QWidget):
 
             else:
                 outputdir = os.path.join(
-                    self.outputdir, (self.labels.name + "_smoothed")
+                    self.outputdir, (self.label_manager.selected_layer.name + "_smoothed")
                 )
                 if os.path.exists(outputdir):
                     shutil.rmtree(outputdir)
                 os.mkdir(outputdir)
 
                 for i in range(
-                    self.labels.data.shape[0]
+                    self.label_manager.selected_layer.data.shape[0]
                 ):  # Loop over the first dimension
-                    current_stack = self.labels.data[
+                    current_stack = self.label_manager.selected_layer.data[
                         i
                     ].compute()  # Compute the current stack
                     smoothed = ndimage.median_filter(
@@ -1073,7 +827,7 @@ class AnnotateLabelsND(QWidget):
                         os.path.join(
                             outputdir,
                             (
-                                self.labels.name
+                                self.label_manager.selected_layer.name
                                 + "_smoothed_TP"
                                 + str(i).zfill(4)
                                 + ".tif"
@@ -1087,35 +841,35 @@ class AnnotateLabelsND(QWidget):
                     for fname in os.listdir(outputdir)
                     if fname.endswith(".tif")
                 ]
-                self.labels = self.viewer.add_labels(
+                self.label_manager.selected_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.labels.name + "_smoothed",
+                    name=self.label_manager.selected_layer.name + "_smoothed",
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
 
         else:
-            if len(self.labels.data.shape) == 4:
+            if len(self.label_manager.selected_layer.data.shape) == 4:
                 stack = []
-                for i in range(self.labels.data.shape[0]):
+                for i in range(self.label_manager.selected_layer.data.shape[0]):
                     smoothed = ndimage.median_filter(
-                        self.labels.data[i],
+                        self.label_manager.selected_layer.data[i],
                         size=self.median_radius_field.value(),
                     )
                     stack.append(smoothed)
-                self.labels = self.viewer.add_labels(
+                self.label_manager.selected_layer = self.viewer.add_labels(
                     np.stack(stack, axis=0),
-                    name=self.labels.name + "_smoothed",
+                    name=self.label_manager.selected_layer.name + "_smoothed",
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
 
-            elif len(self.labels.data.shape) == 3:
-                self.labels = self.viewer.add_labels(
+            elif len(self.label_manager.selected_layer.data.shape) == 3:
+                self.label_manager.selected_layer = self.viewer.add_labels(
                     ndimage.median_filter(
-                        self.labels.data, size=self.median_radius_field.value()
+                        self.label_manager.selected_layer.data, size=self.median_radius_field.value()
                     ),
-                    name=self.labels.name + "_smoothed",
+                    name=self.label_manager.selected_layer.name + "_smoothed",
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
 
             else:
                 print("input should be a 3D or 4D array")
@@ -1129,7 +883,7 @@ class AnnotateLabelsND(QWidget):
             (diam, diam, diam), dtype=bool
         )  # Define a 3x3x3 structuring element for 3D erosion
 
-        if isinstance(self.labels.data, da.core.Array):
+        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
             if self.outputdir is None:
                 msg = QMessageBox()
                 msg.setWindowTitle("No output directory selected")
@@ -1141,16 +895,16 @@ class AnnotateLabelsND(QWidget):
 
             else:
                 outputdir = os.path.join(
-                    self.outputdir, (self.labels.name + "_eroded")
+                    self.outputdir, (self.label_manager.selected_layer.name + "_eroded")
                 )
                 if os.path.exists(outputdir):
                     shutil.rmtree(outputdir)
                 os.mkdir(outputdir)
 
                 for i in range(
-                    self.labels.data.shape[0]
+                    self.label_manager.selected_layer.data.shape[0]
                 ):  # Loop over the first dimension
-                    current_stack = self.labels.data[
+                    current_stack = self.label_manager.selected_layer.data[
                         i
                     ].compute()  # Compute the current stack
                     mask = current_stack > 0
@@ -1165,7 +919,7 @@ class AnnotateLabelsND(QWidget):
                         os.path.join(
                             outputdir,
                             (
-                                self.labels.name
+                                self.label_manager.selected_layer.name
                                 + "_eroded_TP"
                                 + str(i).zfill(4)
                                 + ".tif"
@@ -1179,42 +933,42 @@ class AnnotateLabelsND(QWidget):
                     for fname in os.listdir(outputdir)
                     if fname.endswith(".tif")
                 ]
-                self.labels = self.viewer.add_labels(
+                self.label_manager.selected_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.labels.name + "_eroded",
+                    name=self.label_manager.selected_layer.name + "_eroded",
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
                 return True
 
         else:
-            if len(self.labels.data.shape) == 4:
+            if len(self.label_manager.selected_layer.data.shape) == 4:
                 stack = []
-                for i in range(self.labels.data.shape[0]):
-                    mask = self.labels.data[i] > 0
+                for i in range(self.label_manager.selected_layer.data.shape[0]):
+                    mask = self.label_manager.selected_layer.data[i] > 0
                     filled_mask = ndimage.binary_fill_holes(mask)
                     eroded_mask = binary_erosion(
                         filled_mask,
                         structure=structuring_element,
                         iterations=iterations,
                     )
-                    stack.append(np.where(eroded_mask, self.labels.data[i], 0))
-                self.labels = self.viewer.add_labels(
-                    np.stack(stack, axis=0), name=self.labels.name + "_eroded"
+                    stack.append(np.where(eroded_mask, self.label_manager.selected_layer.data[i], 0))
+                self.label_manager.selected_layer = self.viewer.add_labels(
+                    np.stack(stack, axis=0), name=self.label_manager.selected_layer.name + "_eroded"
                 )
-                self._update_labels(self.labels.name)
-            elif len(self.labels.data.shape) == 3:
-                mask = self.labels.data > 0
+                self._update_labels(self.label_manager.selected_layer.name)
+            elif len(self.label_manager.selected_layer.data.shape) == 3:
+                mask = self.label_manager.selected_layer.data > 0
                 filled_mask = ndimage.binary_fill_holes(mask)
                 eroded_mask = binary_erosion(
                     filled_mask,
                     structure=structuring_element,
                     iterations=iterations,
                 )
-                self.labels = self.viewer.add_labels(
-                    np.where(eroded_mask, self.labels.data, 0),
-                    name=self.labels.name + "_eroded",
+                self.label_manager.selected_layer = self.viewer.add_labels(
+                    np.where(eroded_mask, self.label_manager.selected_layer.data, 0),
+                    name=self.label_manager.selected_layer.name + "_eroded",
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
             else:
                 print("4D or 3D array required!")
 
@@ -1224,7 +978,7 @@ class AnnotateLabelsND(QWidget):
         diam = self.structuring_element_diameter.value()
         iterations = self.iterations.value()
 
-        if isinstance(self.labels.data, da.core.Array):
+        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
             if self.outputdir is None:
                 msg = QMessageBox()
                 msg.setWindowTitle("No output directory selected")
@@ -1236,16 +990,16 @@ class AnnotateLabelsND(QWidget):
 
             else:
                 outputdir = os.path.join(
-                    self.outputdir, (self.labels.name + "_dilated")
+                    self.outputdir, (self.label_manager.selected_layer.name + "_dilated")
                 )
                 if os.path.exists(outputdir):
                     shutil.rmtree(outputdir)
                 os.mkdir(outputdir)
 
                 for i in range(
-                    self.labels.data.shape[0]
+                    self.label_manager.selected_layer.data.shape[0]
                 ):  # Loop over the first dimension
-                    expanded_labels = self.labels.data[
+                    expanded_labels = self.label_manager.selected_layer.data[
                         i
                     ].compute()  # Compute the current stack
                     for _j in range(iterations):
@@ -1256,7 +1010,7 @@ class AnnotateLabelsND(QWidget):
                         os.path.join(
                             outputdir,
                             (
-                                self.labels.name
+                                self.label_manager.selected_layer.name
                                 + "_dilated_TP"
                                 + str(i).zfill(4)
                                 + ".tif"
@@ -1270,39 +1024,39 @@ class AnnotateLabelsND(QWidget):
                     for fname in os.listdir(outputdir)
                     if fname.endswith(".tif")
                 ]
-                self.labels = self.viewer.add_labels(
+                self.label_manager.selected_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.labels.name + "_dilated",
+                    name=self.label_manager.selected_layer.name + "_dilated",
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
                 return True
 
         else:
-            if len(self.labels.data.shape) == 4:
+            if len(self.label_manager.selected_layer.data.shape) == 4:
                 stack = []
-                for i in range(self.labels.data.shape[0]):
-                    expanded_labels = self.labels.data[i]
+                for i in range(self.label_manager.selected_layer.data.shape[0]):
+                    expanded_labels = self.label_manager.selected_layer.data[i]
                     for _j in range(iterations):
                         expanded_labels = expand_labels(
                             expanded_labels, distance=diam
                         )
                     stack.append(expanded_labels)
-                self.labels = self.viewer.add_labels(
-                    np.stack(stack, axis=0), name=self.labels.name + "_dilated"
+                self.label_manager.selected_layer = self.viewer.add_labels(
+                    np.stack(stack, axis=0), name=self.label_manager.selected_layer.name + "_dilated"
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
 
-            elif len(self.labels.data.shape) == 3:
-                expanded_labels = self.labels.data
+            elif len(self.label_manager.selected_layer.data.shape) == 3:
+                expanded_labels = self.label_manager.selected_layer.data
                 for _i in range(iterations):
                     expanded_labels = expand_labels(
                         expanded_labels, distance=diam
                     )
 
-                self.labels = self.viewer.add_labels(
-                    expanded_labels, name=self.labels.name + "_dilated"
+                self.label_manager.selected_layer = self.viewer.add_labels(
+                    expanded_labels, name=self.label_manager.selected_layer.name + "_dilated"
                 )
-                self._update_labels(self.labels.name)
+                self._update_labels(self.label_manager.selected_layer.name)
             else:
                 print("input should be a 3D or 4D stack")
 
@@ -1327,61 +1081,4 @@ class AnnotateLabelsND(QWidget):
             thresholded, name=self.threshold_layer.name + "_thresholded"
         )
 
-    def _calculate_images(self):
-        """Add label image 2 to label image 1"""
 
-        if (
-            isinstance(self.image1_layer, da.core.Array)
-            or isinstance(self.image2_layer, da.core.Array)
-        ):
-            msg = QMessageBox()
-            msg.setWindowTitle(
-                "Cannot yet run image calculator on dask arrays"
-            )
-            msg.setText("Cannot yet run image calculator on dask arrays")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-        if self.image1_layer.data.shape != self.image2_layer.data.shape:
-            msg = QMessageBox()
-            msg.setWindowTitle("Images must have the same shape")
-            msg.setText("Images must have the same shape")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-
-        if self.operation.currentText() == "Add":
-            self.viewer.add_image(
-                np.add(self.image1_layer.data, self.image2_layer.data)
-            )
-        if self.operation.currentText() == "Subtract":
-            self.viewer.add_image(
-                np.subtract(self.image1_layer.data, self.image2_layer.data)
-            )
-        if self.operation.currentText() == "Multiply":
-            self.viewer.add_image(
-                np.multiply(self.image1_layer.data, self.image2_layer.data)
-            )
-        if self.operation.currentText() == "Divide":
-            self.viewer.add_image(
-                np.divide(
-                    self.image1_layer.data,
-                    self.image2_layer.data,
-                    out=np.zeros_like(self.image1_layer.data, dtype=float),
-                    where=self.image2_layer.data != 0,
-                )
-            )
-        if self.operation.currentText() == "AND":
-            self.viewer.add_labels(
-                np.logical_and(
-                    self.image1_layer.data != 0, self.image2_layer.data != 0
-                ).astype(int)
-            )
-        if self.operation.currentText() == "OR":
-            self.viewer.add_labels(
-                np.logical_or(
-                    self.image1_layer.data != 0, self.image2_layer.data != 0
-                ).astype(int)
-            )

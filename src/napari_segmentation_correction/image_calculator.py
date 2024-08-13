@@ -13,7 +13,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from ._layer_dropdown import LayerDropdown
+from .layer_dropdown import LayerDropdown
 
 
 class ImageCalculator(QWidget):

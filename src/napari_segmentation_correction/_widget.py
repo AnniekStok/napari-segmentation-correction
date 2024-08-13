@@ -23,8 +23,8 @@ from qtpy.QtWidgets import (
 )
 from skimage import measure
 
-from ._custom_table_widget import ColoredTableWidget
 from .copy_label_widget import CopyLabelWidget
+from .custom_table_widget import ColoredTableWidget
 from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
 from .layer_manager import LayerManager

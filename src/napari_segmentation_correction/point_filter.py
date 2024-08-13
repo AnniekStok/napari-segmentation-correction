@@ -4,7 +4,7 @@ import functools
 import dask.array as da
 import napari
 import numpy as np
-from napari.layers import Labels, Points
+from napari.layers import Points
 from qtpy.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
 
 from ._layer_dropdown import LayerDropdown
 from .layer_manager import LayerManager
+
 
 class PointFilter(QWidget):
     """Use a points layer to remove or keep selected labels"""
@@ -114,7 +115,7 @@ class PointFilter(QWidget):
                     self.label_manager.selected_layer = self.viewer.add_labels(
                         filtered, name=self.label_manager.selected_layer.name + "_points_kept"
                     )
-                    self._update_labels(self.label_manager.selected_layer.name)
+                    self.label_manager._update_labels(self.label_manager.selected_layer.name)
 
     def _update_points(self, selected_layer: str) -> None:
         """Update the layer that is set to be the 'points' layer for picking labels."""
@@ -202,4 +203,4 @@ class PointFilter(QWidget):
                     self.label_manager.selected_layer = self.viewer.add_labels(
                         filtered, name=self.label_manager.selected_layer.name + "_points_removed"
                     )
-                    self._update_labels(self.label_manager.selected_layer.name)
+                    self.label_manager._update_labels(self.label_manager.selected_layer.name)

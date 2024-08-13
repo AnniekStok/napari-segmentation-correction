@@ -35,8 +35,10 @@ from skimage.segmentation import expand_labels
 from ._custom_table_widget import ColoredTableWidget
 from ._layer_dropdown import LayerDropdown
 from .image_calculator import ImageCalculator
-from .point_filter import PointFilter
 from .layer_manager import LayerManager
+from .point_filter import PointFilter
+from .smoothing_widget import SmoothingWidget
+
 
 class AnnotateLabelsND(QWidget):
     """Widget for manual correction of label data, for example to prepare ground truth data for training a segmentation model"""
@@ -144,24 +146,8 @@ class AnnotateLabelsND(QWidget):
         self.setLayout(self.settings_layout)
 
         ### Add widget for smoothing labels
-        smoothbox = QGroupBox("Smooth objects")
-        smooth_boxlayout = QVBoxLayout()
-
-        smooth_layout = QHBoxLayout()
-        self.median_radius_field = QSpinBox()
-        self.median_radius_field.setMaximum(100)
-        self.smooth_btn = QPushButton("Smooth")
-        smooth_layout.addWidget(self.median_radius_field)
-        smooth_layout.addWidget(self.smooth_btn)
-
-        smooth_boxlayout.addWidget(QLabel("Median filter radius"))
-        smooth_boxlayout.addLayout(smooth_layout)
-
-        self.smooth_btn.clicked.connect(self._smooth_objects)
-        self.smooth_btn.setEnabled(True)
-
-        smoothbox.setLayout(smooth_boxlayout)
-        self.settings_layout.addWidget(smoothbox)
+        smooth_widget = SmoothingWidget(self.viewer, self.label_manager)
+        self.settings_layout.addWidget(smooth_widget)
 
         ### Add widget for eroding/dilating labels
         dil_erode_box = QGroupBox("Erode/dilate labels")
@@ -290,7 +276,7 @@ class AnnotateLabelsND(QWidget):
         else:
             self.target_labels = self.viewer.layers[selected_layer]
             self.target_label_dropdown.setCurrentText(selected_layer)
- 
+
     def _update_threshold_layer(self, selected_layer) -> None:
         """Update the layer that is set to be the 'source labels' layer for copying labels from."""
 
@@ -745,7 +731,7 @@ class AnnotateLabelsND(QWidget):
                     da.stack([imread(fname) for fname in sorted(file_list)]),
                     name=self.label_manager.selected_layer.name + "_sizefiltered",
                 )
-                self._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(self.label_manager.selected_layer.name)
 
         else:
             # Image data is a normal array and can be directly edited.
@@ -771,7 +757,7 @@ class AnnotateLabelsND(QWidget):
                     np.stack(stack, axis=0),
                     name=self.label_manager.selected_layer.name + "_sizefiltered",
                 )
-                self._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(self.label_manager.selected_layer.name)
 
             elif len(self.label_manager.selected_layer.data.shape) == 3:
                 props = measure.regionprops(self.label_manager.selected_layer.data)
@@ -788,91 +774,10 @@ class AnnotateLabelsND(QWidget):
                     np.where(mask, self.label_manager.selected_layer.data, 0),
                     name=self.label_manager.selected_layer.name + "_sizefiltered",
                 )
-                self._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(self.label_manager.selected_layer.name)
 
             else:
                 print("input should be 3D or 4D array")
-
-    def _smooth_objects(self) -> None:
-        """Smooth objects by using a median filter."""
-
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                msg = QMessageBox()
-                msg.setWindowTitle("No output directory selected")
-                msg.setText("Please specify an output directory first!")
-                msg.setIcon(QMessageBox.Information)
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.exec_()
-                return False
-
-            else:
-                outputdir = os.path.join(
-                    self.outputdir, (self.label_manager.selected_layer.name + "_smoothed")
-                )
-                if os.path.exists(outputdir):
-                    shutil.rmtree(outputdir)
-                os.mkdir(outputdir)
-
-                for i in range(
-                    self.label_manager.selected_layer.data.shape[0]
-                ):  # Loop over the first dimension
-                    current_stack = self.label_manager.selected_layer.data[
-                        i
-                    ].compute()  # Compute the current stack
-                    smoothed = ndimage.median_filter(
-                        current_stack, size=self.median_radius_field.value()
-                    )
-                    tifffile.imwrite(
-                        os.path.join(
-                            outputdir,
-                            (
-                                self.label_manager.selected_layer.name
-                                + "_smoothed_TP"
-                                + str(i).zfill(4)
-                                + ".tif"
-                            ),
-                        ),
-                        np.array(smoothed, dtype="uint16"),
-                    )
-
-                file_list = [
-                    os.path.join(outputdir, fname)
-                    for fname in os.listdir(outputdir)
-                    if fname.endswith(".tif")
-                ]
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.label_manager.selected_layer.name + "_smoothed",
-                )
-                self._update_labels(self.label_manager.selected_layer.name)
-
-        else:
-            if len(self.label_manager.selected_layer.data.shape) == 4:
-                stack = []
-                for i in range(self.label_manager.selected_layer.data.shape[0]):
-                    smoothed = ndimage.median_filter(
-                        self.label_manager.selected_layer.data[i],
-                        size=self.median_radius_field.value(),
-                    )
-                    stack.append(smoothed)
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    np.stack(stack, axis=0),
-                    name=self.label_manager.selected_layer.name + "_smoothed",
-                )
-                self._update_labels(self.label_manager.selected_layer.name)
-
-            elif len(self.label_manager.selected_layer.data.shape) == 3:
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    ndimage.median_filter(
-                        self.label_manager.selected_layer.data, size=self.median_radius_field.value()
-                    ),
-                    name=self.label_manager.selected_layer.name + "_smoothed",
-                )
-                self._update_labels(self.label_manager.selected_layer.name)
-
-            else:
-                print("input should be a 3D or 4D array")
 
     def _erode_labels(self):
         """Shrink oversized labels through erosion"""
@@ -937,7 +842,7 @@ class AnnotateLabelsND(QWidget):
                     da.stack([imread(fname) for fname in sorted(file_list)]),
                     name=self.label_manager.selected_layer.name + "_eroded",
                 )
-                self._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(self.label_manager.selected_layer.name)
                 return True
 
         else:
@@ -955,7 +860,7 @@ class AnnotateLabelsND(QWidget):
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     np.stack(stack, axis=0), name=self.label_manager.selected_layer.name + "_eroded"
                 )
-                self._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(self.label_manager.selected_layer.name)
             elif len(self.label_manager.selected_layer.data.shape) == 3:
                 mask = self.label_manager.selected_layer.data > 0
                 filled_mask = ndimage.binary_fill_holes(mask)
@@ -968,7 +873,7 @@ class AnnotateLabelsND(QWidget):
                     np.where(eroded_mask, self.label_manager.selected_layer.data, 0),
                     name=self.label_manager.selected_layer.name + "_eroded",
                 )
-                self._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(self.label_manager.selected_layer.name)
             else:
                 print("4D or 3D array required!")
 
@@ -1028,7 +933,7 @@ class AnnotateLabelsND(QWidget):
                     da.stack([imread(fname) for fname in sorted(file_list)]),
                     name=self.label_manager.selected_layer.name + "_dilated",
                 )
-                self._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(self.label_manager.selected_layer.name)
                 return True
 
         else:
@@ -1044,7 +949,7 @@ class AnnotateLabelsND(QWidget):
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     np.stack(stack, axis=0), name=self.label_manager.selected_layer.name + "_dilated"
                 )
-                self._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(self.label_manager.selected_layer.name)
 
             elif len(self.label_manager.selected_layer.data.shape) == 3:
                 expanded_labels = self.label_manager.selected_layer.data
@@ -1056,7 +961,7 @@ class AnnotateLabelsND(QWidget):
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     expanded_labels, name=self.label_manager.selected_layer.name + "_dilated"
                 )
-                self._update_labels(self.label_manager.selected_layer.name)
+                self.label_manager._update_labels(self.label_manager.selected_layer.name)
             else:
                 print("input should be a 3D or 4D stack")
 

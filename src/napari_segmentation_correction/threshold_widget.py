@@ -1,4 +1,5 @@
 import dask.array as da
+import numpy as np
 import napari
 from napari.layers import Image, Labels
 from qtpy.QtWidgets import (
@@ -10,9 +11,14 @@ from qtpy.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
     QWidget,
+    QFileDialog
 )
 
 from .layer_dropdown import LayerDropdown
+from skimage.io import imread 
+import os
+import tifffile
+import shutil
 
 
 class ThresholdWidget(QWidget):
@@ -22,6 +28,8 @@ class ThresholdWidget(QWidget):
         super().__init__()
 
         self.viewer = viewer
+        self.outputdir = None
+        self.threshold_layer = None
 
         threshold_box = QGroupBox("Threshold")
         threshold_box_layout = QVBoxLayout()
@@ -72,19 +80,55 @@ class ThresholdWidget(QWidget):
         """Threshold the selected label or intensity image"""
 
         if isinstance(self.threshold_layer.data, da.core.Array):
-            msg = QMessageBox()
-            msg.setWindowTitle(
-                "Thresholding not yet implemented for dask arrays"
+            if self.outputdir is None:
+                self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+            
+            outputdir = os.path.join(
+                self.outputdir,
+                (self.threshold_layer.name + "_threshold"),
             )
-            msg.setText("Thresholding not yet implemented for dask arrays")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
+            if os.path.exists(outputdir):
+                shutil.rmtree(outputdir)
+            os.mkdir(outputdir)
 
-        thresholded = (
-            self.threshold_layer.data >= int(self.min_threshold.value())
-        ) & (self.threshold_layer.data <= int(self.max_threshold.value()))
-        self.viewer.add_labels(
-            thresholded, name=self.threshold_layer.name + "_thresholded"
-        )
+            for i in range(
+                self.threshold_layer.data.shape[0]
+            ):  # Loop over the first dimension
+                data = self.threshold_layer.data[
+                    i
+                ].compute()  # Compute the current stack
+                
+                thresholded = (
+                    data >= int(self.min_threshold.value())
+                ) & (data <= int(self.max_threshold.value()))
+
+                tifffile.imwrite(
+                    os.path.join(
+                        outputdir,
+                        (
+                            self.threshold_layer.name
+                            + "_thresholded_TP"
+                            + str(i).zfill(4)
+                            + ".tif"
+                        ),
+                    ),
+                    np.array(thresholded, dtype="uint8"),
+                )
+
+            file_list = [
+                os.path.join(outputdir, fname)
+                for fname in os.listdir(outputdir)
+                if fname.endswith(".tif")
+            ]
+            self.viewer.add_labels(
+                da.stack([imread(fname) for fname in sorted(file_list)]),
+                name=self.threshold_layer.name + "_thresholded",
+            )
+
+        else: 
+            thresholded = (
+                self.threshold_layer.data >= int(self.min_threshold.value())
+            ) & (self.threshold_layer.data <= int(self.max_threshold.value()))
+            self.viewer.add_labels(
+                thresholded, name=self.threshold_layer.name + "_thresholded"
+            )

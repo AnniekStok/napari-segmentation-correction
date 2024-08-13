@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
     QSpinBox,
     QVBoxLayout,
     QWidget,
+    QFileDialog
 )
 from skimage import measure
 from skimage.io import imread
@@ -32,6 +33,7 @@ class SizeFilterWidget(QWidget):
 
         self.viewer = viewer
         self.label_manager = label_manager
+        self.outputdir = None
 
         filterbox = QGroupBox("Filter objects by size")
         filter_layout = QVBoxLayout()
@@ -60,68 +62,61 @@ class SizeFilterWidget(QWidget):
 
         if isinstance(self.label_manager.selected_layer.data, da.core.Array):
             if self.outputdir is None:
-                msg = QMessageBox()
-                msg.setWindowTitle("No output directory selected")
-                msg.setText("Please specify an output directory first!")
-                msg.setIcon(QMessageBox.Information)
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.exec_()
-                return False
+                self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
 
-            else:
-                outputdir = os.path.join(
-                    self.outputdir,
-                    (self.label_manager.selected_layer.name + "_sizefiltered"),
-                )
-                if os.path.exists(outputdir):
-                    shutil.rmtree(outputdir)
-                os.mkdir(outputdir)
+            outputdir = os.path.join(
+                self.outputdir,
+                (self.label_manager.selected_layer.name + "_sizefiltered"),
+            )
+            if os.path.exists(outputdir):
+                shutil.rmtree(outputdir)
+            os.mkdir(outputdir)
 
-                for i in range(
-                    self.label_manager.selected_layer.data.shape[0]
-                ):  # Loop over the first dimension
-                    current_stack = self.label_manager.selected_layer.data[
-                        i
-                    ].compute()  # Compute the current stack
+            for i in range(
+                self.label_manager.selected_layer.data.shape[0]
+            ):  # Loop over the first dimension
+                current_stack = self.label_manager.selected_layer.data[
+                    i
+                ].compute()  # Compute the current stack
 
-                    # measure the sizes in pixels of the labels in slice using skimage.regionprops
-                    props = measure.regionprops(current_stack)
-                    filtered_labels = [
-                        p.label
-                        for p in props
-                        if p.area > self.min_size_field.value()
-                    ]
-                    mask = functools.reduce(
-                        np.logical_or,
-                        (current_stack == val for val in filtered_labels),
-                    )
-                    filtered = np.where(mask, current_stack, 0)
-                    tifffile.imwrite(
-                        os.path.join(
-                            outputdir,
-                            (
-                                self.label_manager.selected_layer.name
-                                + "_sizefiltered_TP"
-                                + str(i).zfill(4)
-                                + ".tif"
-                            ),
-                        ),
-                        np.array(filtered, dtype="uint16"),
-                    )
-
-                file_list = [
-                    os.path.join(outputdir, fname)
-                    for fname in os.listdir(outputdir)
-                    if fname.endswith(".tif")
+                # measure the sizes in pixels of the labels in slice using skimage.regionprops
+                props = measure.regionprops(current_stack)
+                filtered_labels = [
+                    p.label
+                    for p in props
+                    if p.area > self.min_size_field.value()
                 ]
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.label_manager.selected_layer.name
-                    + "_sizefiltered",
+                mask = functools.reduce(
+                    np.logical_or,
+                    (current_stack == val for val in filtered_labels),
                 )
-                self.label_manager._update_labels(
-                    self.label_manager.selected_layer.name
+                filtered = np.where(mask, current_stack, 0)
+                tifffile.imwrite(
+                    os.path.join(
+                        outputdir,
+                        (
+                            self.label_manager.selected_layer.name
+                            + "_sizefiltered_TP"
+                            + str(i).zfill(4)
+                            + ".tif"
+                        ),
+                    ),
+                    np.array(filtered, dtype="uint16"),
                 )
+
+            file_list = [
+                os.path.join(outputdir, fname)
+                for fname in os.listdir(outputdir)
+                if fname.endswith(".tif")
+            ]
+            self.label_manager.selected_layer = self.viewer.add_labels(
+                da.stack([imread(fname) for fname in sorted(file_list)]),
+                name=self.label_manager.selected_layer.name
+                + "_sizefiltered",
+            )
+            self.label_manager._update_labels(
+                self.label_manager.selected_layer.name
+            )
 
         else:
             # Image data is a normal array and can be directly edited.

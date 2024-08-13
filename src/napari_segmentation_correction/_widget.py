@@ -204,42 +204,33 @@ class AnnotateLabelsND(QWidget):
         if isinstance(self.label_manager.selected_layer.data, da.core.Array):
 
             if self.outputdir is None:
-                msg = QMessageBox()
-                msg.setWindowTitle("No output directory selected")
-                msg.setText("Please specify an output directory first!")
-                msg.setIcon(QMessageBox.Information)
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.exec_()
-                return False
+                self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+            outputdir = os.path.join(
+                self.outputdir,
+                (self.label_manager.selected_layer.name + "_finalresult"),
+            )
+            if os.path.exists(outputdir):
+                shutil.rmtree(outputdir)
+            os.mkdir(outputdir)
 
-            else:
-                outputdir = os.path.join(
-                    self.outputdir,
-                    (self.label_manager.selected_layer.name + "_finalresult"),
-                )
-                if os.path.exists(outputdir):
-                    shutil.rmtree(outputdir)
-                os.mkdir(outputdir)
-
-                for i in range(
-                    self.label_manager.selected_layer.data.shape[0]
-                ):  # Loop over the first dimension
-                    current_stack = self.label_manager.selected_layer.data[
-                        i
-                    ].compute()  # Compute the current stack
-                    tifffile.imwrite(
-                        os.path.join(
-                            outputdir,
-                            (
-                                self.label_manager.selected_layer.name
-                                + "_TP"
-                                + str(i).zfill(4)
-                                + ".tif"
-                            ),
+            for i in range(
+                self.label_manager.selected_layer.data.shape[0]
+            ):  # Loop over the first dimension
+                current_stack = self.label_manager.selected_layer.data[
+                    i
+                ].compute()  # Compute the current stack
+                tifffile.imwrite(
+                    os.path.join(
+                        outputdir,
+                        (
+                            self.label_manager.selected_layer.name
+                            + "_TP"
+                            + str(i).zfill(4)
+                            + ".tif"
                         ),
-                        np.array(current_stack, dtype="uint16"),
-                    )
-                return True
+                    ),
+                    np.array(current_stack, dtype="uint16"),
+                )
 
         elif len(self.label_manager.selected_layer.data.shape) == 4:
             filename, _ = QFileDialog.getSaveFileName(

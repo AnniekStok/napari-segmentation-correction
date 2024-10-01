@@ -32,7 +32,7 @@ from .point_filter import PointFilter
 from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
-
+from .select_delete_widget import SelectDeleteMask
 
 class AnnotateLabelsND(QWidget):
     """Widget for manual correction of label data, for example to prepare ground truth data for training a segmentation model"""
@@ -113,6 +113,10 @@ class AnnotateLabelsND(QWidget):
         # Add image calculator
         image_calc = ImageCalculator(self.viewer)
         self.edit_layout.addWidget(image_calc)
+
+        # Add widget for selecting/deleting by mask
+        select_del = SelectDeleteMask(self.viewer)
+        self.edit_layout.addWidget(select_del)
 
         ## add plane viewing widget
         self.slider_table_widget = QWidget()

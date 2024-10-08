@@ -51,7 +51,7 @@ class LabelOptions(napari.layers.Labels):
                     print('This number of dimensions is currently not supported', ndims)
                     return
 
-                 if isinstance(
+                if isinstance(
                     self.label_manager.selected_layer.data, da.core.Array
                 ):
                     target_stack = self.label_manager.selected_layer.data[

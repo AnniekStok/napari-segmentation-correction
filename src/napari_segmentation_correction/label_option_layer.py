@@ -57,12 +57,15 @@ class LabelOptions(napari.layers.Labels):
                     target_stack = self.label_manager.selected_layer.data[
                         coords[-4]
                     ].compute()
+
+                    new_selected_label = np.max(target_stack) + 1
+
                     orig_label = target_stack[
                         coords[-3], coords[-2], coords[-1]
                     ]
                     if orig_label != 0:
                         target_stack[target_stack == orig_label] = 0
-                    target_stack[mask] = np.max(target_stack) + 1
+                    target_stack[mask] = new_selected_label
                     self.label_manager.selected_layer.data[coords[-4]] = (
                         target_stack
                     )
@@ -71,6 +74,8 @@ class LabelOptions(napari.layers.Labels):
                     )
 
                 else:
+                    new_selected_label = np.max(self.label_manager.selected_layer.data) + 1
+
                     if len(self.label_manager.selected_layer.data.shape) == 3:
                         orig_label = self.label_manager.selected_layer.data[
                             coords[-3], coords[-2], coords[-1]
@@ -79,9 +84,7 @@ class LabelOptions(napari.layers.Labels):
                         if orig_label != 0:
                             self.label_manager.selected_layer.data[coords[-3]][
                                 self.label_manager.selected_layer.data[coords[-3]] == orig_label] = 0  # set the original label to zero in current slice only
-                        self.label_manager.selected_layer.data[coords[-3]][mask] = (
-                            np.max(self.label_manager.selected_layer.data) + 1
-                        )
+                        self.label_manager.selected_layer.data[coords[-3]][mask] = new_selected_label
                         self.label_manager.selected_layer.data = (
                             self.label_manager.selected_layer.data
                         )
@@ -98,9 +101,7 @@ class LabelOptions(napari.layers.Labels):
                                 self.label_manager.selected_layer.data[coords[-4]][coords[-3]] == orig_label] = 0  # set the original label to zero
                         self.label_manager.selected_layer.data[coords[-4]][coords[-3]][
                             mask
-                        ] = (
-                            np.max(self.label_manager.selected_layer.data) + 1
-                        )
+                        ] = new_selected_label
                         self.label_manager.selected_layer.data = (
                             self.label_manager.selected_layer.data
                         )
@@ -158,12 +159,14 @@ class LabelOptions(napari.layers.Labels):
                     target_stack = self.label_manager.selected_layer.data[
                         coords[-4]
                     ].compute()
+
+                    new_selected_label = np.max(target_stack) + 1
                     orig_label = target_stack[
                         coords[-3], coords[-2], coords[-1]
                     ]
                     if orig_label != 0:
                         target_stack[target_stack == orig_label] = 0
-                    target_stack[mask] = np.max(target_stack) + 1
+                    target_stack[mask] = new_selected_label
                     self.label_manager.selected_layer.data[coords[-4]] = (
                         target_stack
                     )
@@ -172,6 +175,7 @@ class LabelOptions(napari.layers.Labels):
                     )
 
                 else:
+                    new_selected_label = np.max(self.label_manager.selected_layer.data) + 1
                     if len(self.label_manager.selected_layer.data.shape) == 3:
                         orig_label = self.label_manager.selected_layer.data[
                             coords[-3], coords[-2], coords[-1]
@@ -182,9 +186,7 @@ class LabelOptions(napari.layers.Labels):
                                 self.label_manager.selected_layer.data
                                 == orig_label
                             ] = 0  # set the original label to zero
-                        self.label_manager.selected_layer.data[mask] = (
-                            np.max(self.label_manager.selected_layer.data) + 1
-                        )
+                        self.label_manager.selected_layer.data[mask] = new_selected_label
                         self.label_manager.selected_layer.data = (
                             self.label_manager.selected_layer.data
                         )
@@ -205,9 +207,7 @@ class LabelOptions(napari.layers.Labels):
                             ] = 0  # set the original label to zero
                         self.label_manager.selected_layer.data[coords[-4]][
                             mask
-                        ] = (
-                            np.max(self.label_manager.selected_layer.data) + 1
-                        )
+                        ] = new_selected_label
                         self.label_manager.selected_layer.data = (
                             self.label_manager.selected_layer.data
                         )

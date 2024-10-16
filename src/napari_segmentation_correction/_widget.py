@@ -24,6 +24,7 @@ from qtpy.QtWidgets import (
 from skimage import measure
 
 from .copy_label_widget import CopyLabelWidget
+from .connected_components import ConnectedComponents
 from .custom_table_widget import ColoredTableWidget
 from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
@@ -91,6 +92,10 @@ class AnnotateLabelsND(QWidget):
         ### Add widget for copy-pasting labels from one layer to another
         copy_label_widget = CopyLabelWidget(self.viewer, self.label_manager)
         self.edit_layout.addWidget(copy_label_widget)
+
+        ### Add widget for connected component labeling
+        conn_comp_widget = ConnectedComponents(self.viewer, self.label_manager)
+        self.edit_layout.addWidget(conn_comp_widget)
 
         ### Add widget for size filtering
         size_filter_widget = SizeFilterWidget(self.viewer, self.label_manager)

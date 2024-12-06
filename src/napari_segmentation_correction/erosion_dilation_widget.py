@@ -6,15 +6,14 @@ import napari
 import numpy as np
 import tifffile
 from qtpy.QtWidgets import (
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
-    QFileDialog
 )
 from scipy import ndimage
 from scipy.ndimage import binary_erosion

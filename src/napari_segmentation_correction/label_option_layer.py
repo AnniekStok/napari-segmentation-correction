@@ -43,11 +43,11 @@ class LabelOptions(napari.layers.Labels):
                     mask = (
                         self.data[coords[0], coords[1], :, :] == selected_label
                     )
-                elif ndims == 3: 
+                elif ndims == 3:
                     mask = (
                         self.data[coords[0], :, :] == selected_label
                     )
-                else: 
+                else:
                     print('This number of dimensions is currently not supported', ndims)
                     return
 
@@ -80,7 +80,7 @@ class LabelOptions(napari.layers.Labels):
                         orig_label = self.label_manager.selected_layer.data[
                             coords[-3], coords[-2], coords[-1]
                         ]
-                       
+
                         if orig_label != 0:
                             self.label_manager.selected_layer.data[coords[-3]][
                                 self.label_manager.selected_layer.data[coords[-3]] == orig_label] = 0  # set the original label to zero in current slice only
@@ -145,11 +145,11 @@ class LabelOptions(napari.layers.Labels):
                     mask = (
                         self.data[coords[0], :, :, :] == selected_label
                     )
-                elif ndims == 3: 
+                elif ndims == 3:
                     mask = (
                         self.data[:, :, :] == selected_label
                     )
-                else: 
+                else:
                     print('This number of dimensions is currently not supported', ndims)
                     return
 

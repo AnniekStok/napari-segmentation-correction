@@ -1,24 +1,24 @@
+import os
+import shutil
+
 import dask.array as da
-import numpy as np
 import napari
+import numpy as np
+import tifffile
 from napari.layers import Image, Labels
 from qtpy.QtWidgets import (
+    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
-    QFileDialog
 )
+from skimage.io import imread
 
 from .layer_dropdown import LayerDropdown
-from skimage.io import imread 
-import os
-import tifffile
-import shutil
 
 
 class ThresholdWidget(QWidget):
@@ -82,7 +82,7 @@ class ThresholdWidget(QWidget):
         if isinstance(self.threshold_layer.data, da.core.Array):
             if self.outputdir is None:
                 self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
-            
+
             outputdir = os.path.join(
                 self.outputdir,
                 (self.threshold_layer.name + "_threshold"),
@@ -97,7 +97,7 @@ class ThresholdWidget(QWidget):
                 data = self.threshold_layer.data[
                     i
                 ].compute()  # Compute the current stack
-                
+
                 thresholded = (
                     data >= int(self.min_threshold.value())
                 ) & (data <= int(self.max_threshold.value()))
@@ -125,7 +125,7 @@ class ThresholdWidget(QWidget):
                 name=self.threshold_layer.name + "_thresholded",
             )
 
-        else: 
+        else:
             thresholded = (
                 self.threshold_layer.data >= int(self.min_threshold.value())
             ) & (self.threshold_layer.data <= int(self.max_threshold.value()))

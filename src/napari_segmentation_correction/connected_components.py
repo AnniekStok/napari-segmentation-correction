@@ -1,20 +1,23 @@
+import os
+import shutil
+
 import dask.array as da
 import napari
 import numpy as np
-from skimage.measure import label
+import tifffile
 from qtpy.QtWidgets import (
+    QFileDialog,
     QGroupBox,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
-    QFileDialog
 )
-import os
-import shutil
-import tifffile
 from skimage.io import imread
+from skimage.measure import label
+
 from .layer_manager import LayerManager
+
 
 class ConnectedComponents(QWidget):
     """Widget to run connected component analysis"""
@@ -88,7 +91,7 @@ class ConnectedComponents(QWidget):
             )
             return True
         else:
-            self.label_manager.selected_layer = self.viewer.add_labels(label(self.label_manager.selected_layer.data), 
+            self.label_manager.selected_layer = self.viewer.add_labels(label(self.label_manager.selected_layer.data),
                 name=self.label_manager.selected_layer.name + "_conn_comp",
             )
             self.label_manager._update_labels(

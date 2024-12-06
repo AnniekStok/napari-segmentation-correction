@@ -14,7 +14,6 @@ from qtpy.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QScrollArea,
     QTabWidget,
@@ -23,17 +22,18 @@ from qtpy.QtWidgets import (
 )
 from skimage import measure
 
-from .copy_label_widget import CopyLabelWidget
 from .connected_components import ConnectedComponents
+from .copy_label_widget import CopyLabelWidget
 from .custom_table_widget import ColoredTableWidget
 from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
 from .layer_manager import LayerManager
 from .point_filter import PointFilter
+from .select_delete_widget import SelectDeleteMask
 from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
-from .select_delete_widget import SelectDeleteMask
+
 
 class AnnotateLabelsND(QWidget):
     """Widget for manual correction of label data, for example to prepare ground truth data for training a segmentation model"""

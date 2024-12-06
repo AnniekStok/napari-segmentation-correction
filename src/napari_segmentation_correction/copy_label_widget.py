@@ -104,6 +104,8 @@ class CopyLabelWidget(QWidget):
                 img.shape[-1],
             )
 
+            self.option_labels = np.squeeze(self.option_labels) # squeeze to get rid of dimensions of size 1
+
         self.option_labels = LabelOptions(
             viewer=self.viewer,
             data=self.option_labels,
@@ -114,40 +116,11 @@ class CopyLabelWidget(QWidget):
 
     def _convert_to_option_layer(self) -> None:
 
-        if len(self.label_manager.selected_layer.data.shape) == 3:
-            data = self.label_manager.selected_layer.data.reshape(
-                (
-                    1,
-                    1,
-                )
-                + self.label_manager.selected_layer.data.shape
-            )
-            self.option_labels = LabelOptions(
-                viewer=self.viewer,
-                data=data,
-                name="label options",
-                label_manager=self.label_manager,
-            )
-            self.viewer.layers.append(self.option_labels)
-        elif len(self.label_manager.selected_layer.data.shape) == 4:
-            data = self.label_manager.selected_layer.data.reshape(
-                (1,) + self.label_manager.selected_layer.data.shape
-            )
-            self.option_labels = LabelOptions(
-                viewer=self.viewer,
-                data=data,
-                name="label options",
-                label_manager=self.label_manager,
-            )
-            self.viewer.layers.append(self.option_labels)
-        elif len(self.label_manager.selected_layer.data.shape) == 5:
-            self.option_labels = LabelOptions(
-                viewer=self.viewer,
-                data=self.label_manager.selected_layer.data,
-                name="label options",
-                label_manager=self.label_manager,
-            )
-            self.viewer.layers.append(self.option_labels)
-        else:
-            print("labels data must have at least 3 dimensions")
-            return
+        self.option_labels = LabelOptions(
+            viewer=self.viewer,
+            data=self.label_manager.selected_layer.data,
+            name="label options",
+            label_manager=self.label_manager,
+        )
+        self.viewer.layers.append(self.option_labels)
+

@@ -1,6 +1,7 @@
 import functools
 import os
 import shutil
+from warnings import warn
 
 import dask.array as da
 import napari
@@ -152,7 +153,7 @@ class SizeFilterWidget(QWidget):
                     self.label_manager.selected_layer.name
                 )
 
-            elif len(self.label_manager.selected_layer.data.shape) == 3:
+            elif len(self.label_manager.selected_layer.data.shape) in (2, 3):
                 props = measure.regionprops(
                     self.label_manager.selected_layer.data
                 )
@@ -161,6 +162,11 @@ class SizeFilterWidget(QWidget):
                     for p in props
                     if p.area > self.min_size_field.value()
                 ]
+
+                if len(filtered_labels) == 0:
+                    warn(f"No labels are larger than {self.min_size_field.value()}")
+                    return None
+
                 mask = functools.reduce(
                     np.logical_or,
                     (
@@ -178,4 +184,4 @@ class SizeFilterWidget(QWidget):
                 )
 
             else:
-                print("input should be 3D or 4D array")
+                print("length of input shape should be 2, 3, or 4")

@@ -1,22 +1,17 @@
-import os
 
+import dask.array as da
 import napari
-import numpy as np
+import pandas as pd
 from qtpy.QtWidgets import (
-    QFileDialog,
     QGroupBox,
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
-from skimage.io import imread
-from .plot_widget import PlotWidget
 from skimage import measure
-from .custom_table_widget import ColoredTableWidget
-import dask.array as da
 
-import pandas as pd
+from .custom_table_widget import ColoredTableWidget
 from .layer_manager import LayerManager
+from .plot_widget import PlotWidget
 
 
 class RegionPropsWidget(QWidget):
@@ -41,7 +36,7 @@ class RegionPropsWidget(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(regionprops_box)
         self.setLayout(layout)
-    
+
     def _create_summary_table(self) -> None:
         """Create table displaying the sizes of the different labels in the current stack"""
 
@@ -56,9 +51,9 @@ class RegionPropsWidget(QWidget):
                 )
                 props['time_point'] = tp
                 props_list.append(pd.DataFrame.from_dict(props))
-            
+
             props = pd.concat(props_list)
-                
+
             if hasattr(self.label_manager.selected_layer, "properties"):
                 self.label_manager.selected_layer.properties = props
 
@@ -73,9 +68,9 @@ class RegionPropsWidget(QWidget):
                     )
                     props['time_point'] = tp
                     props_list.append(pd.DataFrame.from_dict(props))
-                
+
                 props = pd.concat(props_list)
-                    
+
                 if hasattr(self.label_manager.selected_layer, "properties"):
                     self.label_manager.selected_layer.properties = props
 

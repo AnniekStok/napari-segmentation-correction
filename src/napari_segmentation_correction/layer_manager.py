@@ -1,6 +1,7 @@
 import dask.array as da
 import napari
 import numpy as np
+from psygnal import Signal
 from qtpy.QtWidgets import (
     QPushButton,
     QVBoxLayout,
@@ -8,7 +9,7 @@ from qtpy.QtWidgets import (
 )
 
 from .layer_dropdown import LayerDropdown
-from psygnal import Signal
+
 
 class LayerManager(QWidget):
     """QComboBox widget with functions for updating the selected layer and to update the list of options when the list of layers is modified."""
@@ -58,7 +59,7 @@ class LayerManager(QWidget):
             self.convert_to_array_btn.setEnabled(
                 isinstance(self._selected_layer.data, da.core.Array)
             )
-        
+
             self.layer_update.emit()
 
     def _convert_to_array(self) -> None:

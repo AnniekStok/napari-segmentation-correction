@@ -22,17 +22,17 @@ from qtpy.QtWidgets import (
 
 from .connected_components import ConnectedComponents
 from .copy_label_widget import CopyLabelWidget
-
 from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
 from .layer_manager import LayerManager
 from .point_filter import PointFilter
+from .regionprops_widget import RegionPropsWidget
 from .select_delete_widget import SelectDeleteMask
 from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
 from .view3D import View3D
-from .regionprops_widget import RegionPropsWidget
+
 
 class AnnotateLabelsND(QWidget):
     """Widget for manual correction of label data, for example to prepare ground truth data for training a segmentation model"""
@@ -151,7 +151,7 @@ class AnnotateLabelsND(QWidget):
             self.output_path.setText(path)
             self.outputdir = str(self.output_path.text())
 
-    
+
 
     def _save_labels(self) -> None:
         """Save the currently active labels layer. If it consists of multiple timepoints, they are written to multiple 3D stacks."""

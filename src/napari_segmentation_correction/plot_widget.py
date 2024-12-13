@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import pandas as pd
 from matplotlib.backends.backend_qt5agg import (
     FigureCanvas,
     NavigationToolbar2QT,
@@ -10,6 +9,7 @@ from matplotlib.backends.backend_qt5agg import (
 from matplotlib.colors import ListedColormap, to_rgb
 from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+
 from .layer_manager import LayerManager
 
 ICON_ROOT = Path(__file__).parent / "icons"
@@ -88,7 +88,7 @@ class PlotWidget(QWidget):
             self.label_manager.selected_layer.events.selected_label.connect(self._update_plot)
             self.label_manager.selected_layer.events.features.connect(self._update_dropdown)
 
-    def _update_dropdown(self) -> None: 
+    def _update_dropdown(self) -> None:
         """Update the dropdowns with the column headers"""
 
         if len(self.label_manager.selected_layer.features) > 0:

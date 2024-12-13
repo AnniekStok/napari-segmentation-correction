@@ -9,7 +9,7 @@ import dask.array as da
 import napari
 import numpy as np
 import tifffile
-from napari_plane_sliders._plane_slider_widget import PlaneSliderWidget
+from .view3D import View3D
 from qtpy.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -69,7 +69,7 @@ class AnnotateLabelsND(QWidget):
         self.table_btn = QPushButton("Show table")
         self.table_btn.clicked.connect(self._create_summary_table)
         self.table_btn.clicked.connect(
-            lambda: self.tab_widget.setCurrentIndex(0)
+            lambda: self.tab_widget.setCurrentIndex(2)
         )
         if self.label_manager.selected_layer is not None:
             self.table_btn.setEnabled(True)
@@ -123,14 +123,9 @@ class AnnotateLabelsND(QWidget):
         select_del = SelectDeleteMask(self.viewer)
         self.edit_layout.addWidget(select_del)
 
-        ## add plane viewing widget
-        self.slider_table_widget = QWidget()
-        self.plane_slider_table_layout = QVBoxLayout()
-        self.plane_slider_table_layout.addWidget(
-            PlaneSliderWidget(self.viewer)
-        )
-        self.slider_table_widget.setLayout(self.plane_slider_table_layout)
-        self.tab_widget.addTab(self.slider_table_widget, "Plane Viewing")
+        ## add 3d viewing widget
+        self.view3d_widget = View3D(self.viewer)
+        self.tab_widget.addTab(self.view3d_widget, "3D Viewing")
 
         ## add combined editing widgets widgets
         self.edit_widgets = QWidget()
@@ -140,6 +135,12 @@ class AnnotateLabelsND(QWidget):
         scroll_area.setWidgetResizable(True)
         self.tab_widget.addTab(scroll_area, "Editing")
         self.tab_widget.setCurrentIndex(1)
+
+        ## add widget for viewing data
+        self.data_view_layout = QVBoxLayout()
+        self.data_view = QWidget()
+        self.data_view.setLayout(self.data_view_layout)
+        self.tab_widget.addTab(self.data_view, "Data view")
 
         # Add the tab widget to the main layout
         self.main_layout = QVBoxLayout()
@@ -205,7 +206,7 @@ class AnnotateLabelsND(QWidget):
             )
             self.table._set_label_colors_to_rows()
             self.table.setMinimumWidth(500)
-            self.plane_slider_table_layout.addWidget(self.table)
+            self.data_view_layout.addWidget(self.table)
 
     def _save_labels(self) -> None:
         """Save the currently active labels layer. If it consists of multiple timepoints, they are written to multiple 3D stacks."""

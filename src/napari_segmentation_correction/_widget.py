@@ -164,7 +164,7 @@ class AnnotateLabelsND(QWidget):
                 tp
             ].compute()  # Compute the current stack
             props = measure.regionprops_table(
-                current_stack, properties=["label", "area", "centroid"]
+                current_stack, properties=["label", "num_pixels", "area", "centroid"], spacing=self.label_manager.selected_layer.scale
             )
             if hasattr(self.label_manager.selected_layer, "properties"):
                 self.label_manager.selected_layer.properties = props
@@ -176,24 +176,26 @@ class AnnotateLabelsND(QWidget):
                 tp = self.viewer.dims.current_step[0]
                 props = measure.regionprops_table(
                     self.label_manager.selected_layer.data[tp],
-                    properties=["label", "area", "centroid"],
+                    properties=["label", "num_pixels", "area", "centroid"],
+                    spacing=self.label_manager.selected_layer.scale
                 )
                 if hasattr(self.label_manager.selected_layer, "properties"):
                     self.label_manager.selected_layer.properties = props
                 if hasattr(self.label_manager.selected_layer, "features"):
                     self.label_manager.selected_layer.features = props
 
-            elif len(self.label_manager.selected_layer.data.shape) == 3:
+            elif len(self.label_manager.selected_layer.data.shape) in (2, 3):
                 props = measure.regionprops_table(
                     self.label_manager.selected_layer.data,
-                    properties=["label", "area", "centroid"],
+                    properties=["label", "num_pixels", "area", "centroid"],
+                    spacing=self.label_manager.selected_layer.scale
                 )
                 if hasattr(self.label_manager.selected_layer, "properties"):
                     self.label_manager.selected_layer.properties = props
                 if hasattr(self.label_manager.selected_layer, "features"):
                     self.label_manager.selected_layer.features = props
             else:
-                print("input should be a 3D or 4D array")
+                print("input should be a 2D, 3D or 4D array")
                 self.table = None
 
         # add the napari-skimage-regionprops inspired table to the viewer

@@ -19,11 +19,10 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from skimage import measure
 
 from .connected_components import ConnectedComponents
 from .copy_label_widget import CopyLabelWidget
-from .custom_table_widget import ColoredTableWidget
+
 from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
 from .layer_manager import LayerManager
@@ -33,7 +32,7 @@ from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
 from .view3D import View3D
-
+from .regionprops_widget import RegionPropsWidget
 
 class AnnotateLabelsND(QWidget):
     """Widget for manual correction of label data, for example to prepare ground truth data for training a segmentation model"""
@@ -44,7 +43,6 @@ class AnnotateLabelsND(QWidget):
 
         self.source_labels = None
         self.target_labels = None
-        self.table = None
         self.points = None
         self.copy_points = None
         self.outputdir = None
@@ -67,7 +65,8 @@ class AnnotateLabelsND(QWidget):
 
         ### Add widget for adding overview table
         self.table_btn = QPushButton("Show table")
-        self.table_btn.clicked.connect(self._create_summary_table)
+        self.regionprops_widget = RegionPropsWidget(self.viewer, self.label_manager)
+        self.table_btn.clicked.connect(self.regionprops_widget._create_summary_table)
         self.table_btn.clicked.connect(
             lambda: self.tab_widget.setCurrentIndex(2)
         )
@@ -137,10 +136,7 @@ class AnnotateLabelsND(QWidget):
         self.tab_widget.setCurrentIndex(1)
 
         ## add widget for viewing data
-        self.data_view_layout = QVBoxLayout()
-        self.data_view = QWidget()
-        self.data_view.setLayout(self.data_view_layout)
-        self.tab_widget.addTab(self.data_view, "Data view")
+        self.tab_widget.addTab(self.regionprops_widget, "Region properties")
 
         # Add the tab widget to the main layout
         self.main_layout = QVBoxLayout()
@@ -155,60 +151,7 @@ class AnnotateLabelsND(QWidget):
             self.output_path.setText(path)
             self.outputdir = str(self.output_path.text())
 
-    def _create_summary_table(self) -> None:
-        """Create table displaying the sizes of the different labels in the current stack"""
-
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            tp = self.viewer.dims.current_step[0]
-            current_stack = self.label_manager.selected_layer.data[
-                tp
-            ].compute()  # Compute the current stack
-            props = measure.regionprops_table(
-                current_stack, properties=["label", "num_pixels", "area", "centroid"], spacing=self.label_manager.selected_layer.scale
-            )
-            if hasattr(self.label_manager.selected_layer, "properties"):
-                self.label_manager.selected_layer.properties = props
-            if hasattr(self.label_manager.selected_layer, "features"):
-                self.label_manager.selected_layer.features = props
-
-        else:
-            if len(self.label_manager.selected_layer.data.shape) == 4:
-                tp = self.viewer.dims.current_step[0]
-                props = measure.regionprops_table(
-                    self.label_manager.selected_layer.data[tp],
-                    properties=["label", "num_pixels", "area", "centroid"],
-                    spacing=self.label_manager.selected_layer.scale
-                )
-                if hasattr(self.label_manager.selected_layer, "properties"):
-                    self.label_manager.selected_layer.properties = props
-                if hasattr(self.label_manager.selected_layer, "features"):
-                    self.label_manager.selected_layer.features = props
-
-            elif len(self.label_manager.selected_layer.data.shape) in (2, 3):
-                props = measure.regionprops_table(
-                    self.label_manager.selected_layer.data,
-                    properties=["label", "num_pixels", "area", "centroid"],
-                    spacing=self.label_manager.selected_layer.scale
-                )
-                if hasattr(self.label_manager.selected_layer, "properties"):
-                    self.label_manager.selected_layer.properties = props
-                if hasattr(self.label_manager.selected_layer, "features"):
-                    self.label_manager.selected_layer.features = props
-            else:
-                print("input should be a 2D, 3D or 4D array")
-                self.table = None
-
-        # add the napari-skimage-regionprops inspired table to the viewer
-        if self.table is not None:
-            self.table.hide()
-
-        if self.viewer is not None:
-            self.table = ColoredTableWidget(
-                self.label_manager.selected_layer, self.viewer
-            )
-            self.table._set_label_colors_to_rows()
-            self.table.setMinimumWidth(500)
-            self.data_view_layout.addWidget(self.table)
+    
 
     def _save_labels(self) -> None:
         """Save the currently active labels layer. If it consists of multiple timepoints, they are written to multiple 3D stacks."""
@@ -283,9 +226,9 @@ class AnnotateLabelsND(QWidget):
     def _clear_layers(self) -> None:
         """Clear all the layers in the viewer"""
 
-        if self.table is not None:
-            self.table.hide()
-            self.table = None
+        if self.regionprops_widget.table is not None:
+            self.regionprops_widget.table.hide()
+            self.regionprops_widget.table = None
             self.edit_layout.update()
 
         self.viewer.layers.clear()

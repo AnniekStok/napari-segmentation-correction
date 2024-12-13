@@ -41,7 +41,7 @@ class SizeFilterWidget(QWidget):
         label_size = QLabel("Size threshold (voxels)")
         threshold_size_layout = QHBoxLayout()
         self.min_size_field = QSpinBox()
-        self.min_size_field.setMaximum(1000000)
+        self.min_size_field.setMaximum(10000000)
         self.delete_btn = QPushButton("Delete")
         threshold_size_layout.addWidget(self.min_size_field)
         threshold_size_layout.addWidget(self.delete_btn)
@@ -84,7 +84,7 @@ class SizeFilterWidget(QWidget):
                 filtered_labels = [
                     p.label
                     for p in props
-                    if p.area > self.min_size_field.value()
+                    if p.num_pixels > self.min_size_field.value()
                 ]
                 mask = functools.reduce(
                     np.logical_or,
@@ -131,7 +131,7 @@ class SizeFilterWidget(QWidget):
                     filtered_labels = [
                         p.label
                         for p in props
-                        if p.area > self.min_size_field.value()
+                        if p.num_pixels > self.min_size_field.value()
                     ]
                     mask = functools.reduce(
                         np.logical_or,
@@ -160,7 +160,7 @@ class SizeFilterWidget(QWidget):
                 filtered_labels = [
                     p.label
                     for p in props
-                    if p.area > self.min_size_field.value()
+                    if p.num_pixels > self.min_size_field.value()
                 ]
 
                 if len(filtered_labels) == 0:

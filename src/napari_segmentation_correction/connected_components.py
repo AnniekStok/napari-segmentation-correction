@@ -90,8 +90,17 @@ class ConnectedComponents(QWidget):
                 self.label_manager.selected_layer.name
             )
             return True
-        else:
-            self.label_manager.selected_layer = self.viewer.add_labels(label(self.label_manager.selected_layer.data),
+        else:          
+            shape = self.label_manager.selected_layer.data.shape
+            if len(shape) > 3:
+                conn_comp = np.zeros_like(self.label_manager.selected_layer.data)
+                for i in range(shape[0]):
+                    conn_comp[i] = label(self.label_manager.selected_layer.data[i])
+            
+            else: 
+                conn_comp = label(self.label_manager.selected_layer.data)
+            
+            self.label_manager.selected_layer = self.viewer.add_labels(conn_comp,
                 name=self.label_manager.selected_layer.name + "_conn_comp",
             )
             self.label_manager._update_labels(

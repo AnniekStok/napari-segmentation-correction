@@ -2,11 +2,9 @@ import napari
 import numpy as np
 from motile_plugin.data_views.views.layers.contour_labels import ContourLabels
 from motile_plugin.data_views.views.layers.track_graph import TrackGraph
-from motile_plugin.data_views.views.layers.track_labels import TrackLabels
-from motile_plugin.data_views.views.layers.track_points import TrackPoints
 from napari.components.layerlist import Extent
 from napari.components.viewer_model import ViewerModel
-from napari.layers import Labels, Layer, Points, Vectors
+from napari.layers import Labels, Layer, Vectors
 from napari.qt import QtViewer
 from napari.utils.action_manager import action_manager
 from napari.utils.events.event import WarningEmitter
@@ -300,7 +298,7 @@ class MultipleViewerWidget(QSplitter):
                 self.viewer_model1.layers[event.value.name].events.data.connect(
                     self._sync_data
                 )
-               
+
                 self.viewer_model2.layers[event.value.name].events.data.connect(
                     self._sync_data
                 )

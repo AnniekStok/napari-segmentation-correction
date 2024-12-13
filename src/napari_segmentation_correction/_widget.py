@@ -9,7 +9,6 @@ import dask.array as da
 import napari
 import numpy as np
 import tifffile
-from .view3D import View3D
 from qtpy.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -33,6 +32,7 @@ from .select_delete_widget import SelectDeleteMask
 from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
+from .view3D import View3D
 
 
 class AnnotateLabelsND(QWidget):

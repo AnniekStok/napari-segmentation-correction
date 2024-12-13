@@ -1,7 +1,7 @@
 import napari
+from napari_plane_sliders._plane_slider_widget import PlaneSliderWidget
 from qtpy.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from napari_plane_sliders._plane_slider_widget import PlaneSliderWidget
 from .multiple_view_widget import CrossWidget, MultipleViewerWidget
 
 

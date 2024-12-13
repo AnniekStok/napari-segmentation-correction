@@ -24,7 +24,7 @@ from .layer_manager import LayerManager
 
 
 class ErosionDilationWidget(QWidget):
-    """Widget to perform calculations between two images"""
+    """Widget to perform erosion/dilation on label images"""
 
     def __init__(
         self, viewer: "napari.viewer.Viewer", label_manager: LayerManager

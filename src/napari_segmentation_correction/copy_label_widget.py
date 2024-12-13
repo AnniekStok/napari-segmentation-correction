@@ -16,7 +16,7 @@ from .layer_manager import LayerManager
 
 
 class CopyLabelWidget(QWidget):
-    """Widget to perform calculations between two images"""
+    """Widget to create a "Labels Options" Layer from which labels can be copied to another layer"""
 
     def __init__(
         self, viewer: "napari.viewer.Viewer", label_manager: LayerManager

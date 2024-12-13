@@ -22,7 +22,7 @@ from .layer_dropdown import LayerDropdown
 
 
 class ThresholdWidget(QWidget):
-    """Widget to perform calculations between two images"""
+    """Widget that applies a threshold to an image or labels layer"""
 
     def __init__(self, viewer: "napari.viewer.Viewer") -> None:
         super().__init__()

@@ -6,6 +6,7 @@ from .multiple_view_widget import CrossWidget, MultipleViewerWidget
 
 
 class OrthogonalViews(QWidget):
+    """Combine multiple views and cross widget in a single widget"""
     def __init__(
         self,
         viewer: napari.Viewer,

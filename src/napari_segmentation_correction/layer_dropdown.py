@@ -58,6 +58,7 @@ class LayerDropdown(QComboBox):
         for layer in layers:
             self.addItem(layer.name)
             items.append(layer.name)
+            layer.events.name.connect(self._update_dropdown)
 
         # In case the currently selected layer is one of the available items, set it again to the current value of the dropdown.
         if selected_layer in items:

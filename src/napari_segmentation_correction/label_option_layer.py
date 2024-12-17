@@ -44,28 +44,34 @@ class LabelOptions(napari.layers.Labels):
     def copy_label(self, event, coords, selected_label):
 
             dims_displayed = event.dims_displayed
+            ndims_options = len(self.data.shape)            
+            ndims_label = len(self.label_manager.selected_layer.data.shape)
+            ndims = len(coords)
+
+            if not (ndims_options == ndims_label or ndims_options == ndims_label + 1 or ndims_options == ndims_label - 1):
+                print(f"Invalid dimensions! Got {ndims_options} for the options layer and {ndims_label} for the target layer.")
+                return
+
             if event.type == "mouse_press" and event.button == 2: # copy a single slice only
-
-                ndims = len(self.data.shape)
-                ndims_label = len(self.label_manager.selected_layer.data.shape)
-
-                if not (ndims == ndims_label or ndims == ndims_label + 1):
-                    print(f"Invalid dimensions! Got {ndims} for the options layer and {ndims_label} for the target layer.")
-                    return
 
                 # Create a list of `slice(None)` for all dimensions of self.data
                 slices = [slice(None)] * ndims  
+                if ndims_options == ndims_label - 1: 
+                    dims_displayed = [dim-1 for dim in dims_displayed]              
                 for i in range(ndims):
                     if i not in dims_displayed:
                         slices[i] = coords[i]  # Replace the slice with a specific coordinate for slider dims
 
                 # Clip coords to the shape of the label manager's data
-                if ndims == ndims_label + 1:
+                if ndims_options == ndims_label + 1:
                     coords_clipped = coords[1:]
                     label_slices = slices[1:]
+                elif ndims_options == ndims_label - 1: 
+                    coords_clipped = [self.viewer.dims.current_step[0], *coords]
+                    label_slices = [self.viewer.dims.current_step[0], *slices]
                 else:
                     coords_clipped = coords
-                    label_slices = slices
+                    label_slices = slices                            
 
                 if isinstance(self.data, da.core.Array):
                     mask = self.data[tuple(slices)].compute() == selected_label
@@ -109,7 +115,7 @@ class LabelOptions(napari.layers.Labels):
                 ) # to refresh the layer
 
             elif event.type == "mouse_press" and "Shift" in event.modifiers:
-                ndims = len(self.data.shape)
+
                 if ndims == 5:
                     mask = (
                         self.data[coords[0], coords[1], :, :, :] == selected_label

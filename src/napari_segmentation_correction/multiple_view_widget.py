@@ -1,7 +1,5 @@
 import napari
 import numpy as np
-from motile_plugin.data_views.views.layers.contour_labels import ContourLabels
-from motile_plugin.data_views.views.layers.track_graph import TrackGraph
 from napari.components.layerlist import Extent
 from napari.components.viewer_model import ViewerModel
 from napari.layers import Labels, Layer, Vectors
@@ -15,11 +13,15 @@ from qtpy.QtWidgets import (
     QSplitter,
 )
 from superqt.utils import qthrottled
+from .label_option_layer import LabelOptions
 
 
 def copy_layer(layer: Layer, name: str = ""):
     res_layer = Layer.create(*layer.as_layer_data_tuple())
     res_layer.metadata["viewer_name"] = name
+
+    if isinstance(layer, LabelOptions):
+        res_layer.contour = 1 
     return res_layer
 
 def get_property_names(layer: Layer):
@@ -241,6 +243,14 @@ class MultipleViewerWidget(QSplitter):
                     self._sync_data
                 )
 
+                if isinstance(layer, LabelOptions): 
+                    self.viewer_model1.layers[layer.name].mouse_drag_callbacks.append(
+                        self._sync_click
+                    )
+                    self.viewer_model2.layers[layer.name].mouse_drag_callbacks.append(
+                        self._sync_click
+                    )
+
             layer.events.name.connect(self._sync_name)
 
             self._order_update()
@@ -325,6 +335,15 @@ class MultipleViewerWidget(QSplitter):
                 self.viewer_model2.layers[event.value.name].events.set_data.connect(
                     self._set_data_refresh
                 )
+            
+            if isinstance(event.value, LabelOptions): 
+                self.viewer_model1.layers[event.value.name].mouse_drag_callbacks.append(
+                    self._sync_click
+                )
+                self.viewer_model2.layers[event.value.name].mouse_drag_callbacks.append(
+                    self._sync_click
+                )
+
 
             # connect events
             if event.value.name != ".cross":
@@ -339,6 +358,32 @@ class MultipleViewerWidget(QSplitter):
             event.value.events.name.connect(self._sync_name)
 
             self._order_update()
+
+    def _sync_click(self, layer, event):
+        """Forward the click event to the LabelOptions layer"""
+       
+        name = layer.name
+        if (
+            event.type == "mouse_press"
+            and name in self.viewer.layers
+            and isinstance(self.viewer.layers[name], LabelOptions)
+        ):
+
+
+            selected_label = layer.get_value(
+                event.position,
+                view_direction=event.view_direction,
+                dims_displayed=event.dims_displayed,
+                world=True,
+            )
+
+            coords = self.viewer.layers[name].world_to_data(event.position)
+            coords = [int(c) for c in coords]
+
+            print('clicked on label:', selected_label, 'with coords', coords)
+
+            # Process the click event on the LabelOptions layer
+            self.viewer.layers[name].copy_label(event, coords, selected_label)
 
     def _sync_name(self, event):
         """sync name of layers"""
@@ -379,8 +424,6 @@ class MultipleViewerWidget(QSplitter):
                     continue
                 try:
                     self._block = True
-                    if isinstance(layer, ContourLabels):
-                        layer.group_labels = event.source.group_labels
                     layer.refresh()
                 finally:
                     self._block = False

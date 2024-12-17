@@ -7,7 +7,7 @@
 [![codecov](https://codecov.io/gh/AnniekStok/napari-segmentation-correction/branch/main/graph/badge.svg)](https://codecov.io/gh/AnniekStok/napari-segmentation-correction)
 [![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-segmentation-correction)](https://napari-hub.org/plugins/napari-segmentation-correction)
 
-A collection of functions for manually correcting cell segmentation in 3D (z, y, x) or 4D (t, z, y, x) (virtual) arrays. 
+Toolbox for viewing, analyzing and correcting (cell) segmentation in 2D, 3D or 4D (t, z, y, x) (virtual) arrays. 
 ----------------------------------
 
 This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template.
@@ -29,18 +29,33 @@ To install latest development version :
     pip install git+https://github.com/AnniekStok/napari-segmentation-correction.git
 
 ## Usage
-This plugin aims to help you correct segmentation results. It can work with 3D arrays, 4D arrays, or 4D virtual arrays. There are several functionalities: 
-- explore label properties in a table widget, based on [napari-skimage-regionprops](https://github.com/haesleinhuepf/napari-skimage-regionprops)
-- filter labels by size
-- select/delete labels with point layer selection
-- copy labels from a nD array with multiple segmentation options to your current label layer. For this you have to add a special labels layer for which you need to select a folder that contains subfolders for the different options. In each subfolder, there should be one 3D image per time point (or just one image if there is only one time point).
-- erode/dilate labels
-- smooth labels
+This plugin serves as a toolbox aiming to help with correcting segmentation results.
+Functionalities:
+- Orthogonal views for 3D data based on the [MultipleViewerWidget](https://github.com/napari/napari/blob/e490e5535438ab338a23b17905a1952f15a6d27a/examples/multiple_viewer_widget.py) and 3D plane and clipping plane sliders.
+- explore label properties (scikit-image regionprops) in a table widget (based on [napari-skimage-regionprops](https://github.com/haesleinhuepf/napari-skimage-regionprops)) and a Matplotlib plot.
+- select/delete labels using a points layer
+- copy labels from a 2-5 dimensional array with multiple segmentation options to your current 2-4 dimensional label layer.
+- label connected components (scikit-image)
+- filter labels by number of pixels
+- smooth labels (using a median filter)
+- erode/dilate labels (scipy.ndimage and scikit-image)
+- binarize an image or labels layer by applying an intensity threshold
+- image calculator for mathematical operations on two images
+- selecting/deleting labels that overlap with a binary mask
 
-![](instructions/napari-ndlabelcorrection_filter_by_size.gif)
+### 3D viewing
+![](instructions/3d_viewing.gif)
 
-![](instructions/copy-paste_labels.gif)
+### Copy labels between different labels layers
+![](instructions/copy_labels.gif)
+To copy 2D or 3D labels from one layer to another, follow these steps: 
+1) Select the labels layer from which you want to copy, and click 'Convert current label layer to label options layer' 
+2) Make sure the labels layer to which you want to copy is your new current label layer (clicking on it will activate it, or select it from the dropdown at the top of the Editing tab). 
+3) With the layer named 'labels options' selected, Shift+Click on the main view or any of the orthogonal views to copy the label you clicked on to the target layer. Alternatively, right-mouse click will copy only the 2D label from the current view (yx for the main view, xz and yz for the orthogonal views) to the corresponding position in target layer.
 
+### Select / delete labels that overlap with a binary mask
+![](instructions/select_labels_by_mask.png)
+All labels that share any pixel overlap with the mask are selected.
 
 ## Contributing
 

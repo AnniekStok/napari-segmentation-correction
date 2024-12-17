@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import napari
 from PyQt5.QtCore import pyqtSignal
 from qtpy.QtWidgets import QComboBox
@@ -10,7 +8,7 @@ class LayerDropdown(QComboBox):
 
     layer_changed = pyqtSignal(str)  # signal to emit the selected layer name
 
-    def __init__(self, viewer: napari.Viewer, layer_type: Tuple):
+    def __init__(self, viewer: napari.Viewer, layer_type: tuple):
         super().__init__()
         self.viewer = viewer
         self.layer_type = layer_type

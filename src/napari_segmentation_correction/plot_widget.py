@@ -57,14 +57,14 @@ class PlotWidget(QWidget):
         y_axis_layout.addWidget(QLabel("y-axis"))
         y_axis_layout.addWidget(self.y_combo)
 
-        self.x_combo.currentIndexChanged.connect(self._update_plot)
-        self.y_combo.currentIndexChanged.connect(self._update_plot)
-
         color_group_layout = QHBoxLayout()
         self.group_combo = QComboBox()
-        self.group_combo.currentIndexChanged.connect(self._update_plot)
         color_group_layout.addWidget(QLabel("Group color"))
         color_group_layout.addWidget(self.group_combo)
+
+        self.x_combo.currentIndexChanged.connect(self._update_plot)
+        self.y_combo.currentIndexChanged.connect(self._update_plot)
+        self.group_combo.currentIndexChanged.connect(self._update_plot)
 
         dropdown_layout = QVBoxLayout()
         dropdown_layout.addLayout(x_axis_layout)
@@ -91,36 +91,38 @@ class PlotWidget(QWidget):
     def _update_dropdown(self) -> None:
         """Update the dropdowns with the column headers"""
 
+        # temporarily disconnect listening to updates in the comboboxes
+        self.x_combo.currentIndexChanged.disconnect(self._update_plot)
+        self.y_combo.currentIndexChanged.disconnect(self._update_plot)
+        self.group_combo.currentIndexChanged.disconnect(self._update_plot)
+
         if len(self.label_manager.selected_layer.features) > 0:
-            if self.x_combo.count() > 0:
-                prev_index = self.x_combo.currentIndex()
-            else:
-                prev_index = 0
+            prev_index = self.x_combo.currentIndex() if self.x_combo.count() > 0 else 0
             self.x_combo.clear()
             self.x_combo.addItems(
                 [item for item in self.label_manager.selected_layer.features.columns if item != "index"]
             )
             self.x_combo.setCurrentIndex(prev_index)
 
-            if self.y_combo.count() > 0:
-                prev_index = self.y_combo.currentIndex()
-            else:
-                prev_index = 1
+            prev_index = self.y_combo.currentIndex() if self.y_combo.count() > 0 else 1
             self.y_combo.clear()
             self.y_combo.addItems(
                 [item for item in self.label_manager.selected_layer.features.columns if item != "index"]
             )
             self.y_combo.setCurrentIndex(prev_index)
 
-            if self.group_combo.count() > 0:
-                prev_index = self.group_combo.currentIndex()
-            else:
-                prev_index = 0
+            prev_index = self.group_combo.currentIndex() if self.group_combo.count() > 0 else 0
             self.group_combo.clear()
             self.group_combo.addItems(
                 [item for item in self.label_manager.selected_layer.features.columns if item != "index"]
             )
             self.group_combo.setCurrentIndex(prev_index)
+
+        # reconnect to updates in the comboboxes
+        self.x_combo.currentIndexChanged.connect(self._update_plot)
+        self.y_combo.currentIndexChanged.connect(self._update_plot)
+        self.group_combo.currentIndexChanged.connect(self._update_plot)
+        self._update_plot()
 
     def _update_plot(self) -> None:
         """Update the plot by plotting the features selected by the user."""
@@ -131,62 +133,64 @@ class PlotWidget(QWidget):
             y_axis_property = self.y_combo.currentText()
             group = self.group_combo.currentText()
 
-            # Clear data points, and reset the axis scaling and labels.
-            for artist in self.ax.lines + self.ax.collections:
-                artist.remove()
-            self.ax.set_xlabel(x_axis_property)
-            self.ax.set_ylabel(y_axis_property)
-            self.ax.relim()  # Recalculate limits for the current data
-            self.ax.autoscale_view()  # Update the view to include the new limits
+            if x_axis_property != '' and y_axis_property != '' and group != '':
 
-            if group == "label":
-                if self.label_manager.selected_layer.show_selected_label:
-                    label = self.label_manager.selected_layer.selected_label
-                    plotting_data = self.label_manager.selected_layer.features[
-                        self.label_manager.selected_layer.features["label"] == label
-                    ]
-                    unique_labels = [label]
+                # Clear data points, and reset the axis scaling and labels.
+                for artist in self.ax.lines + self.ax.collections:
+                    artist.remove()
+                self.ax.set_xlabel(x_axis_property)
+                self.ax.set_ylabel(y_axis_property)
+                self.ax.relim()  # Recalculate limits for the current data
+                self.ax.autoscale_view()  # Update the view to include the new limits
+
+                if group == "label":
+                    if self.label_manager.selected_layer.show_selected_label:
+                        label = self.label_manager.selected_layer.selected_label
+                        plotting_data = self.label_manager.selected_layer.features[
+                            self.label_manager.selected_layer.features["label"] == label
+                        ]
+                        unique_labels = [label]
+                    else:
+                        plotting_data = self.label_manager.selected_layer.features
+                        unique_labels = plotting_data["label"].unique()
+
+                    # Create consistent label-to-color mapping
+                    colormap = self.label_manager.selected_layer.colormap
+                    label_colors = {
+                        label: to_rgb(colormap.map(label))
+                        for label in unique_labels
+                    }
+
+                    # Scatter plot
+                    self.ax.scatter(
+                        plotting_data[x_axis_property],
+                        plotting_data[y_axis_property],
+                        c=plotting_data["label"].map(label_colors),
+                        cmap=ListedColormap(list(label_colors.values())),  # Consistent colormap
+                        s=10,
+                    )
+
+                    # Line plot for time_point x-axis
+                    if x_axis_property == "time_point":
+                        for label, color in label_colors.items():
+                            label_data = plotting_data[plotting_data["label"] == label].sort_values(by=x_axis_property)
+                            self.ax.plot(
+                                label_data[x_axis_property],
+                                label_data[y_axis_property],
+                                linestyle='-',
+                                color=color,
+                                linewidth=1,
+                            )
+
                 else:
-                    plotting_data = self.label_manager.selected_layer.features
-                    unique_labels = plotting_data["label"].unique()
+                    # Continuous colormap for other grouping
+                    self.ax.scatter(
+                        self.label_manager.selected_layer.features[x_axis_property],
+                        self.label_manager.selected_layer.features[y_axis_property],
+                        c=self.label_manager.selected_layer.features[group],
+                        cmap="summer",
+                        s=10,
+                    )
 
-                # Create consistent label-to-color mapping
-                colormap = self.label_manager.selected_layer.colormap
-                label_colors = {
-                    label: to_rgb(colormap.map(label))
-                    for label in unique_labels
-                }
-
-                # Scatter plot
-                self.ax.scatter(
-                    plotting_data[x_axis_property],
-                    plotting_data[y_axis_property],
-                    c=plotting_data["label"].map(label_colors),
-                    cmap=ListedColormap(list(label_colors.values())),  # Consistent colormap
-                    s=10,
-                )
-
-                # Line plot for time_point x-axis
-                if x_axis_property == "time_point":
-                    for label, color in label_colors.items():
-                        label_data = plotting_data[plotting_data["label"] == label].sort_values(by=x_axis_property)
-                        self.ax.plot(
-                            label_data[x_axis_property],
-                            label_data[y_axis_property],
-                            linestyle='-',
-                            color=color,
-                            linewidth=1,
-                        )
-
-            else:
-                # Continuous colormap for other grouping
-                self.ax.scatter(
-                    self.label_manager.selected_layer.features[x_axis_property],
-                    self.label_manager.selected_layer.features[y_axis_property],
-                    c=self.label_manager.selected_layer.features[group],
-                    cmap="summer",
-                    s=10,
-                )
-
-            self.plot_canvas.draw()
+                self.plot_canvas.draw()
 

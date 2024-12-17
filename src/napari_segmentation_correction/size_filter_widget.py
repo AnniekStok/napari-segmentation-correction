@@ -164,7 +164,7 @@ class SizeFilterWidget(QWidget):
                 ]
 
                 if len(filtered_labels) == 0:
-                    warn(f"No labels are larger than {self.min_size_field.value()}")
+                    warn(f"No labels are larger than {self.min_size_field.value()}", stacklevel=2)
                     return None
 
                 mask = functools.reduce(

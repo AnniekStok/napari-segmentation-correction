@@ -321,9 +321,7 @@ class SelectDeleteMask(QWidget):
             return False
 
     def delete_labels(self):
-        """Delete labels that overlap with given mask. 
-        If the shape of the mask has 1 dimension less than the image, 
-        the mask will be applied to the current time point (index in the first dimension) of the image data."""
+        """Delete labels that overlap with given mask. If the shape of the mask has 1 dimension less than the image, the mask will be applied to the current time point (index in the first dimension) of the image data."""
 
         if isinstance(self.mask_layer.data, da.core.Array):
             msg = QMessageBox()

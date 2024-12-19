@@ -121,15 +121,6 @@ class SelectDeleteMask(QWidget):
 
     def select_labels(self):
 
-        if isinstance(self.mask_layer.data, da.core.Array):
-            msg = QMessageBox()
-            msg.setWindowTitle("Please provide a mask that is not a Dask array")
-            msg.setText("Please provide a mask that is not a Dask array")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-
         # check data dimensions first
         image_shape = self.image1_layer.data.shape
         mask_shape = self.mask_layer.data.shape
@@ -281,9 +272,14 @@ class SelectDeleteMask(QWidget):
                         i
                     ].compute()  # Compute the current stack
 
-                    to_delete = np.unique(current_stack[self.mask_layer.data[tp] > 0])
-                    for label in to_delete:
-                        current_stack[current_stack == label] = 0
+                    if isinstance(self.mask_layer.data, da.core.Array):
+                        to_keep = np.unique(current_stack[self.mask_layer.data[i].compute() > 0])                       
+                    else:
+                        to_keep = np.unique(current_stack[self.mask_layer.data[i] > 0])
+
+                    filtered_mask = functools.reduce(np.logical_or, (current_stack == val for val in to_keep))
+                    filtered_data_tp = np.where(filtered_mask, current_stack, 0)
+
                     tifffile.imwrite(
                         os.path.join(
                             outputdir,
@@ -294,7 +290,7 @@ class SelectDeleteMask(QWidget):
                                 + ".tif"
                             ),
                         ),
-                        np.array(current_stack, dtype="uint16"),
+                        np.array(filtered_data_tp, dtype="uint16"),
                     )
 
                 file_list = [

@@ -44,12 +44,14 @@ class ColoredTableWidget(TableWidget):
         current_step = self._viewer.dims.current_step
         z = int(self._table["centroid-0"][row])
         if len(current_step) == 4:
-            t = int(self._table["centroid-0"][row])
-            z = int(self._table["centroid-1"][row])
+            t = int(self._table["time_point"][row])
             new_step = (t, z, current_step[2], current_step[3])
         elif len(current_step) == 3:
-            z = int(self._table["centroid-0"][row])
-            new_step = (z, current_step[1], current_step[2])
+            if 'time_point' in self._table:
+                t = int(self._table["time_point"][row])
+                new_step = (t, current_step[1], current_step[2])
+            else: 
+                new_step = (z, current_step[1], current_step[2])
         else:
             new_step = current_step
         self._viewer.dims.current_step = new_step

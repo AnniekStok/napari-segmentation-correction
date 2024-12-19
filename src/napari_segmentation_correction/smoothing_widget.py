@@ -31,6 +31,7 @@ class SmoothingWidget(QWidget):
 
         self.viewer = viewer
         self.label_manager = label_manager
+        self.outputdir = None
 
         smoothbox = QGroupBox("Smooth objects")
         smooth_boxlayout = QVBoxLayout()

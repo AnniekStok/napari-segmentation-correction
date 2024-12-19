@@ -51,7 +51,7 @@ class ConnectedComponents(QWidget):
 
             outputdir = os.path.join(
                 self.outputdir,
-                (self.label_manager.selected_layer.name + "_eroded"),
+                (self.label_manager.selected_layer.name + "_conncomp"),
             )
             if os.path.exists(outputdir):
                 shutil.rmtree(outputdir)

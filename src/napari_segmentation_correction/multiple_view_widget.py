@@ -149,15 +149,23 @@ class CrossWidget(QCheckBox):
         if self.layer in self.viewer.layers:
             self.viewer.layers.remove(self.layer)
         self.layer = Vectors(name=".cross", ndim=event.value)
-        self.layer.edge_width = 1
+        self.layer.vector_style = "line"
+        self.layer.edge_width = 2
         self.update_cross()
 
     def _update_cross_visibility(self, state):
         if state:
+            if self.layer is None:
+                self.layer = Vectors(name=".cross", ndim=self.viewer.dims.ndim)
+                self.layer.vector_style = "line"
+                self.layer.edge_width = 2
             self.viewer.layers.append(self.layer)
         else:
             self.viewer.layers.remove(self.layer)
         self.update_cross()
+        if not np.any(self.layer.edge_color):
+            self.layer.edge_color = "red"
+            self.layer.vector_style = "line"
 
     def update_cross(self):
         if self.layer not in self.viewer.layers:
@@ -213,12 +221,12 @@ class MultipleViewerWidget(QSplitter):
         self.viewer_model2.events.status.connect(self._status_update)
 
         # add any existing layers to viewer
-        for layer in self.viewer.layers:
+        for i, layer in enumerate(self.viewer.layers):
             self.viewer_model1.layers.insert(
-                0, copy_layer(layer, "model1")
+                i, copy_layer(layer, "model1")
             )
             self.viewer_model2.layers.insert(
-                0, copy_layer(layer, "model2")
+                i, copy_layer(layer, "model2")
             )
             for name in get_property_names(layer):
                 getattr(layer.events, name).connect(
@@ -239,14 +247,29 @@ class MultipleViewerWidget(QSplitter):
                 self.viewer_model1.layers[layer.name].events.data.connect(
                     self._sync_data
                 )
-
+                self.viewer_model1.layers[layer.name].events.mode.connect(
+                    self._sync_mode
+                )
                 self.viewer_model2.layers[layer.name].events.data.connect(
                     self._sync_data
                 )
+                self.viewer_model2.layers[layer.name].events.mode.connect(
+                    self._sync_mode
+                )                
 
-                if isinstance(layer, LabelOptions):
+                if isinstance(self.viewer_model1.layers[layer.name], Labels):
+
+                    self.viewer_model1.layers[layer.name].events.selected_label.connect(
+                        self._sync_selected_label
+                    )
                     self.viewer_model1.layers[layer.name].mouse_drag_callbacks.append(
                         self._sync_click
+                    )
+
+                if isinstance(self.viewer_model2.layers[layer.name], Labels):
+
+                    self.viewer_model2.layers[layer.name].events.selected_label.connect(
+                        self._sync_selected_label
                     )
                     self.viewer_model2.layers[layer.name].mouse_drag_callbacks.append(
                         self._sync_click
@@ -255,6 +278,22 @@ class MultipleViewerWidget(QSplitter):
             layer.events.name.connect(self._sync_name)
 
             self._order_update()
+        
+        # connect to events
+        self.viewer.layers.events.inserted.connect(self._layer_added)
+        self.viewer.layers.events.removed.connect(self._layer_removed)
+        self.viewer.layers.events.moved.connect(self._layer_moved)
+        self.viewer.layers.selection.events.active.connect(
+            self._layer_selection_changed
+        )
+        self.viewer.dims.events.current_step.connect(self._point_update)
+        self.viewer_model1.dims.events.current_step.connect(self._point_update)
+        self.viewer_model2.dims.events.current_step.connect(self._point_update)
+        self.viewer.dims.events.order.connect(self._order_update)
+        self.viewer.events.reset_view.connect(self._reset_view)
+        self.viewer_model1.events.status.connect(self._status_update)
+        self.viewer_model2.events.status.connect(self._status_update)
+
 
     def _status_update(self, event):
         self.viewer.status = event.value
@@ -356,9 +395,48 @@ class MultipleViewerWidget(QSplitter):
                     self._sync_data
                 )
 
+                if isinstance(self.viewer_model1.layers[event.value.name], Labels):
+                    self.viewer_model1.layers[
+                        event.value.name
+                    ].events.selected_label.connect(self._sync_selected_label)
+
+                if isinstance(self.viewer_model2.layers[event.value.name], Labels):
+                    self.viewer_model2.layers[
+                        event.value.name
+                    ].events.selected_label.connect(self._sync_selected_label)
+
+
             event.value.events.name.connect(self._sync_name)
 
             self._order_update()
+
+    def _sync_selected_label(self, event):
+        """Sync the selected label between Label instances"""
+
+        for model in [self.viewer, self.viewer_model1, self.viewer_model2]:
+            if event.source.name in model.layers:
+                layer = model.layers[event.source.name]
+                if layer is event.source:
+                    return
+                try:
+                    self._block = True
+                    layer.selected_label = event.source.selected_label
+                finally:
+                    self._block = False
+
+    def _sync_mode(self, event):
+        """Sync the tool mode between source viewer and other viewer models"""
+
+        for model in [self.viewer, self.viewer_model1, self.viewer_model2]:
+            if event.source.name in model.layers:
+                layer = model.layers[event.source.name]
+                if layer is event.source:
+                    continue
+                try:
+                    self._block = True
+                    layer.mode = event.source.mode
+                finally:
+                    self._block = False
 
     def _sync_click(self, layer, event):
         """Forward the click event to the LabelOptions layer"""

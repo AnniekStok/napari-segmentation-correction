@@ -2,7 +2,8 @@ import napari
 from napari_plane_sliders._plane_slider_widget import PlaneSliderWidget
 from qtpy.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from .multiple_view_widget import CrossWidget, MultipleViewerWidget
+from .cross_widget import CrossWidget
+from .multiple_view_widget import MultipleViewerWidget
 
 
 class OrthogonalViews(QWidget):

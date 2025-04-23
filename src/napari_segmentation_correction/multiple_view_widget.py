@@ -1,18 +1,14 @@
 import napari
-import numpy as np
-from napari.components.layerlist import Extent
 from napari.components.viewer_model import ViewerModel
-from napari.layers import Labels, Layer, Vectors
+from napari.layers import Labels, Layer
 from napari.qt import QtViewer
 from napari.utils.action_manager import action_manager
+from napari.utils.events import Event
 from napari.utils.events.event import WarningEmitter
-from napari.utils.notifications import show_info
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
-    QCheckBox,
     QSplitter,
 )
-from superqt.utils import qthrottled
 
 from .label_option_layer import LabelOptions
 
@@ -41,35 +37,6 @@ def get_property_names(layer: Layer):
     return res
 
 
-def center_cross_on_mouse(
-    viewer_model: napari.components.viewer_model.ViewerModel,
-):
-    """move the cross to the mouse position"""
-
-    if not getattr(viewer_model, "mouse_over_canvas", True):
-        # There is no way for napari 0.4.15 to check if mouse is over sending canvas.
-        show_info("Mouse is not over the canvas. You may need to click on the canvas.")
-        return
-
-    viewer_model.dims.current_step = tuple(
-        np.round(
-            [
-                max(min_, min(p, max_)) / step
-                for p, (min_, max_, step) in zip(
-                    viewer_model.cursor.position, viewer_model.dims.range, strict=False
-                )
-            ]
-        ).astype(int)
-    )
-
-
-action_manager.register_action(
-    name="napari:move_point",
-    command=center_cross_on_mouse,
-    description="Move dims point to mouse position",
-    keymapprovider=ViewerModel,
-)
-
 action_manager.bind_shortcut("napari:move_point", "C")
 
 
@@ -88,103 +55,124 @@ class own_partial:
         return self.func(*(self.args + args), **{**self.kwargs, **kwargs})
 
 
-class QtViewerWrap(QtViewer):
-    def __init__(self, main_viewer, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.main_viewer = main_viewer
+class DockableViewerModel:
+    """
+    A dockable container that holds a ViewerModel and manages synchronization.
+    """
 
-    def _qt_open(
-        self,
-        filenames: list,
-        stack: bool,
-        plugin: str = None,
-        layer_type: str = None,
-        **kwargs,
+    def __init__(self, title: str, rel_order: tuple[int]):
+        self.title = title
+        self.rel_order = rel_order
+        self.viewer_model = ViewerModel(title)
+        self.viewer_model.axes.visible = True
+        self._block = False
+
+    def add_layer(self, orig_layer: Layer, index: int):
+        """Set the layers of the contained ViewerModel."""
+        self.viewer_model.layers.insert(index, copy_layer(orig_layer, self.title))
+        copied_layer = self.viewer_model.layers[orig_layer.name]
+
+        # sync name
+        def sync_name_wrapper(event):
+            return self.sync_name(orig_layer, copied_layer, event)
+
+        orig_layer.events.name.connect(sync_name_wrapper)
+
+        # sync properties
+        for property_name in get_property_names(orig_layer):
+            # sync in both directions (from original layer to copied layer and back)
+                getattr(orig_layer.events, property_name).connect(
+                    own_partial(
+                        self.sync_property,
+                        property_name,
+                        orig_layer,
+                        copied_layer,
+                    )
+                )
+
+                getattr(copied_layer.events, property_name).connect(
+                    own_partial(
+                        self.sync_property,
+                        property_name,
+                        copied_layer,
+                        orig_layer,
+                    )
+                )
+
+        if isinstance(orig_layer, Labels):
+            # if the original layer is a labels layer, we want to connect to the paint event,
+            # because we need it in order to invoke syncing between the different viewers.
+            # (Paint event does not trigger 'data' event by itself).
+            # We do not need to connect to the eraser and fill bucket separately.
+
+            copied_layer.events.paint.connect(
+                lambda event: self.update_data(
+                    source=copied_layer, target=orig_layer, event=event
+                )  # copy data from copied_layer to orig_layer (orig_layer emits signal, which triggers update on other viewer models, if present)
+            )
+            orig_layer.events.paint.connect(
+                lambda event: self.update_data(
+                    source=orig_layer, target=copied_layer, event=event
+                )  # copy data from orig_layer to copied_layer (copied_layer emits signal but we don't process it)
+            )
+        
+        if isinstance(orig_layer, LabelOptions):
+
+            # sync click events
+            def click_wrapper(layer, event):
+                return self._sync_click(orig_layer, layer, event)
+
+            copied_layer.mouse_drag_callbacks.append(click_wrapper)
+
+
+    def _sync_click(self, orig_layer: LabelOptions, copied_layer: Labels, event: Event) -> None:
+        """Forward the click event to the LabelOptions layer"""
+
+        if event.type == "mouse_press":
+            selected_label = copied_layer.get_value(
+                event.position,
+                view_direction=event.view_direction,
+                dims_displayed=event.dims_displayed,
+                world=True,
+            )
+
+            coords = orig_layer.world_to_data(event.position)
+            coords = [int(c) for c in coords]
+
+            # Process the click event on the LabelOptions layer
+            orig_layer.copy_label(event, coords, selected_label)
+
+    def update_data(self, source: Labels, target: Labels, event: Event) -> None:
+        """Copy data from source layer to target layer, which triggers a data event on the target layer. Block syncing to itself (VM1 -> orig -> VM1 is blocked, but VM1 -> orig -> VM2 is not blocked)
+        Args:
+            source: the source Labels layer
+            target: the target Labels layer
+            event: the event to be triggered (not used)"""
+
+        self._block = True  # no syncing to itself is necessary
+        target.data = source.data  # trigger data event so that it can sync to other viewer models (only if target layer is orig_layer)
+        self._block = False
+
+    def sync_name(self, orig_layer: Layer, copied_layer: Layer, event: Event):
+        """Forward the renaming event from original layer to copied layer"""
+
+        copied_layer.name = orig_layer.name
+
+    def sync_property(
+        self, property_name: str, source_layer: Layer, target_layer: Layer, event: Event
     ):
-        """for drag and drop open files"""
-        self.main_viewer.window._qt_viewer._qt_open(
-            filenames, stack, plugin, layer_type, **kwargs
-        )
+        """Sync a property of a layer in this viewer model."""
 
-
-class CrossWidget(QCheckBox):
-    """
-    Widget to control the cross layer. because of the performance reason
-    the cross update is throttled
-    """
-
-    def __init__(self, viewer: napari.Viewer):
-        super().__init__("Add cross layer")
-        self.viewer = viewer
-        self.setChecked(False)
-        self.stateChanged.connect(self._update_cross_visibility)
-        self.layer = None
-        self.viewer.dims.events.order.connect(self.update_cross)
-        self.viewer.dims.events.ndim.connect(self._update_ndim)
-        self.viewer.dims.events.current_step.connect(self.update_cross)
-        self._extent = None
-
-        self._update_extent()
-        self.viewer.dims.events.connect(self._update_extent)
-
-    @qthrottled(leading=False)
-    def _update_extent(self):
-        """
-        Calculate the extent of the data.
-
-        Ignores the cross layer itself in calculating the extent.
-        """
-
-        extent_list = [
-            layer.extent for layer in self.viewer.layers if layer is not self.layer
-        ]
-        self._extent = Extent(
-            data=None,
-            world=self.viewer.layers._get_extent_world(extent_list),
-            step=self.viewer.layers._get_step_size(extent_list),
-        )
-        self.update_cross()
-
-    def _update_ndim(self, event):
-        if self.layer in self.viewer.layers:
-            self.viewer.layers.remove(self.layer)
-        self.layer = Vectors(name=".cross", ndim=event.value)
-        self.layer.vector_style = "line"
-        self.layer.edge_width = 2
-        self.update_cross()
-
-    def _update_cross_visibility(self, state):
-        if state:
-            if self.layer is None:
-                self.layer = Vectors(name=".cross", ndim=self.viewer.dims.ndim)
-                self.layer.vector_style = "line"
-                self.layer.edge_width = 2
-            self.viewer.layers.append(self.layer)
-        else:
-            self.viewer.layers.remove(self.layer)
-        self.update_cross()
-        if not np.any(self.layer.edge_color):
-            self.layer.edge_color = "red"
-            self.layer.vector_style = "line"
-
-    def update_cross(self):
-        if self.layer not in self.viewer.layers:
-            self.setChecked(False)
+        if self._block:
             return
 
-        point = self.viewer.dims.current_step
-        vec = []
-        for i, (lower, upper) in enumerate(self._extent.world.T):
-            if (upper - lower) / self._extent.step[i] == 1:
-                continue
-            point1 = list(point)
-            point1[i] = (lower + self._extent.step[i] / 2) / self._extent.step[i]
-            point2 = [0 for _ in point]
-            point2[i] = (upper - lower) / self._extent.step[i]
-            vec.append((point1, point2))
-        if np.any(self.layer.scale != self._extent.step):
-            self.layer.scale = self._extent.step
-        self.layer.data = vec
+        self._block = True
+        setattr(
+            target_layer,
+            property_name,
+            getattr(source_layer, property_name),
+        )
+        self._block = False
 
 
 class MultipleViewerWidget(QSplitter):
@@ -193,11 +181,12 @@ class MultipleViewerWidget(QSplitter):
     def __init__(self, viewer: napari.Viewer):
         super().__init__()
         self.viewer = viewer
-        self.viewer_model1 = ViewerModel(title="model1")
-        self.viewer_model2 = ViewerModel(title="model2")
-        self._block = False
-        self.qt_viewer1 = QtViewerWrap(viewer, self.viewer_model1)
-        self.qt_viewer2 = QtViewerWrap(viewer, self.viewer_model2)
+        self.viewer.axes.visible = True
+        self.viewer.axes.events.visible.connect(self.set_orth_views_dims_order)
+        self.viewer_model1 = DockableViewerModel(title="model1", rel_order=(-2, -3, -1))
+        self.viewer_model2 = DockableViewerModel(title="model2", rel_order=(-1, -2, -3))
+        self.qt_viewer1 = QtViewer(self.viewer_model1.viewer_model)
+        self.qt_viewer2 = QtViewer(self.viewer_model2.viewer_model)
         viewer_splitter = QSplitter()
         viewer_splitter.setOrientation(Qt.Vertical)
         viewer_splitter.addWidget(self.qt_viewer1)
@@ -206,339 +195,132 @@ class MultipleViewerWidget(QSplitter):
 
         self.addWidget(viewer_splitter)
 
-        self.viewer.layers.events.inserted.connect(self._layer_added)
-        self.viewer.layers.events.removed.connect(self._layer_removed)
-        self.viewer.layers.events.moved.connect(self._layer_moved)
-        self.viewer.layers.selection.events.active.connect(
-            self._layer_selection_changed
-        )
-        self.viewer.dims.events.current_step.connect(self._point_update)
-        self.viewer_model1.dims.events.current_step.connect(self._point_update)
-        self.viewer_model2.dims.events.current_step.connect(self._point_update)
-        self.viewer.dims.events.order.connect(self._order_update)
-        self.viewer.events.reset_view.connect(self._reset_view)
-        self.viewer_model1.events.status.connect(self._status_update)
-        self.viewer_model2.events.status.connect(self._status_update)
-
-        # add any existing layers to viewer
+        # Add the layers currently in the viewer
         for i, layer in enumerate(self.viewer.layers):
-            self.viewer_model1.layers.insert(
-                i, copy_layer(layer, "model1")
-            )
-            self.viewer_model2.layers.insert(
-                i, copy_layer(layer, "model2")
-            )
-            for name in get_property_names(layer):
-                getattr(layer.events, name).connect(
-                    own_partial(self._property_sync, name)
-                )
+            self.viewer_model1.add_layer(layer, i)
+            self.viewer_model2.add_layer(layer, i)
 
-            if isinstance(layer, Labels):
-                layer.events.set_data.connect(self._set_data_refresh)
-                self.viewer_model1.layers[layer.name].events.set_data.connect(
-                    self._set_data_refresh
-                )
-                self.viewer_model2.layers[layer.name].events.set_data.connect(
-                    self._set_data_refresh
-                )
-
-            # connect events
-            if layer.name != ".cross":
-                self.viewer_model1.layers[layer.name].events.data.connect(
-                    self._sync_data
-                )
-                self.viewer_model1.layers[layer.name].events.mode.connect(
-                    self._sync_mode
-                )
-                self.viewer_model2.layers[layer.name].events.data.connect(
-                    self._sync_data
-                )
-                self.viewer_model2.layers[layer.name].events.mode.connect(
-                    self._sync_mode
-                )                
-
-                if isinstance(self.viewer_model1.layers[layer.name], Labels):
-
-                    self.viewer_model1.layers[layer.name].events.selected_label.connect(
-                        self._sync_selected_label
-                    )
-                    self.viewer_model1.layers[layer.name].mouse_drag_callbacks.append(
-                        self._sync_click
-                    )
-
-                if isinstance(self.viewer_model2.layers[layer.name], Labels):
-
-                    self.viewer_model2.layers[layer.name].events.selected_label.connect(
-                        self._sync_selected_label
-                    )
-                    self.viewer_model2.layers[layer.name].mouse_drag_callbacks.append(
-                        self._sync_click
-                    )
-
-            layer.events.name.connect(self._sync_name)
-
-            self._order_update()
-        
-        # connect to events
+        # Connect to events
         self.viewer.layers.events.inserted.connect(self._layer_added)
         self.viewer.layers.events.removed.connect(self._layer_removed)
         self.viewer.layers.events.moved.connect(self._layer_moved)
         self.viewer.layers.selection.events.active.connect(
             self._layer_selection_changed
         )
-        self.viewer.dims.events.current_step.connect(self._point_update)
-        self.viewer_model1.dims.events.current_step.connect(self._point_update)
-        self.viewer_model2.dims.events.current_step.connect(self._point_update)
-        self.viewer.dims.events.order.connect(self._order_update)
         self.viewer.events.reset_view.connect(self._reset_view)
-        self.viewer_model1.events.status.connect(self._status_update)
-        self.viewer_model2.events.status.connect(self._status_update)
+        self.viewer.dims.events.current_step.connect(self._update_current_step)
+        self.viewer_model1.viewer_model.dims.events.current_step.connect(
+            self._update_current_step
+        )
+        self.viewer_model2.viewer_model.dims.events.current_step.connect(
+            self._update_current_step
+        )
 
+        # Adjust dimensions for orthogonal views
+        self.set_orth_views_dims_order()
 
-    def _status_update(self, event):
-        self.viewer.status = event.value
+    def set_orth_views_dims_order(self):
+        """The the order of the z,y,x dims in the orthogonal views, by using the rel_order attribute of the viewer models"""
+
+        # TODO: allow the user to provide the dimension order and names.
+        axis_labels = ("t", "z", "y", "x")  # assume default axis labels for now
+        order = list(self.viewer.dims.order)
+
+        if len(order) > 2:
+            # model 1 axis order (e.g. xz view)
+            m1_order = list(order)
+            m1_order[-3:] = (
+                m1_order[self.viewer_model1.rel_order[0]],
+                m1_order[self.viewer_model1.rel_order[1]],
+                m1_order[self.viewer_model1.rel_order[2]],
+            )
+            self.viewer_model1.viewer_model.dims.order = m1_order
+
+            # model 2 axis order (e.g. yz view)
+            m2_order = list(order)
+            m2_order[-3:] = (
+                m2_order[self.viewer_model2.rel_order[0]],
+                m2_order[self.viewer_model2.rel_order[1]],
+                m2_order[self.viewer_model2.rel_order[2]],
+            )
+
+            self.viewer_model2.viewer_model.dims.order = m2_order
+
+        if len(order) == 3:  # assume we have zyx axes
+            self.viewer.dims.axis_labels = axis_labels[1:]
+            self.viewer_model1.viewer_model.dims.axis_labels = axis_labels[1:]
+            self.viewer_model2.viewer_model.dims.axis_labels = axis_labels[1:]
+        elif len(order) == 4:  # assume we have tzyx axes
+            self.viewer.dims.axis_labels = axis_labels
+            self.viewer_model1.viewer_model.dims.axis_labels = axis_labels
+            self.viewer_model2.viewer_model.dims.axis_labels = axis_labels
+
+        # whether or not the axis should be visible
+        self.viewer_model1.viewer_model.axes.visible = self.viewer.axes.visible
+        self.viewer_model2.viewer_model.axes.visible = self.viewer.axes.visible
 
     def _reset_view(self):
-        self.viewer_model1.reset_view()
-        self.viewer_model2.reset_view()
+        """Propagate the reset view event"""
 
-    def _reset_layers(self):
-        self.viewer_model1.layers.clear()
-        self.viewer_model2.layers.clear()
+        self.viewer_model1.viewer_model.reset_view()
+        self.viewer_model2.viewer_model.reset_view()
 
     def _layer_selection_changed(self, event):
-        """
-        update of current active layer
-        """
-        if self._block:
-            return
+        """Update of current active layers"""
 
         if event.value is None:
-            self.viewer_model1.layers.selection.active = None
-            self.viewer_model2.layers.selection.active = None
+            self.viewer_model1.viewer_model.layers.selection.active = None
+            self.viewer_model2.viewer_model.layers.selection.active = None
             return
 
-        if event.value.name in self.viewer_model1.layers:
-            self.viewer_model1.layers.selection.active = self.viewer_model1.layers[
-                event.value.name
-            ]
-        if event.value.name in self.viewer_model2.layers:
-            self.viewer_model2.layers.selection.active = self.viewer_model2.layers[
-                event.value.name
-            ]
+        if event.value.name in self.viewer_model1.viewer_model.layers:
+            self.viewer_model1.viewer_model.layers.selection.active = (
+                self.viewer_model1.viewer_model.layers[event.value.name]
+            )
+        if event.value.name in self.viewer_model2.viewer_model.layers:
+            self.viewer_model2.viewer_model.layers.selection.active = (
+                self.viewer_model2.viewer_model.layers[event.value.name]
+            )
 
-    def _point_update(self, event):
-        try:
-            for model in [self.viewer, self.viewer_model1, self.viewer_model2]:
-                if model.dims is event.source:
-                    continue
-                model.dims.current_step = event.value
-        except IndexError:
-            "Layer was already removed! This error likely occurs because two actions are called at the same time."
+    def _update_current_step(self, event):
+        """Sync the current step between different viewer models"""
 
-    def _order_update(self):
-        order = list(self.viewer.dims.order)
-        if len(order) <= 2:
-            self.viewer_model1.dims.order = order
-            self.viewer_model2.dims.order = order
-            return
-
-        order[-3:] = order[-2], order[-3], order[-1]
-        self.viewer_model1.dims.order = order
-        order = list(self.viewer.dims.order)
-        order[-3:] = order[-1], order[-2], order[-3]
-        self.viewer_model2.dims.order = order
+        for model in [
+            self.viewer,
+            self.viewer_model1.viewer_model,
+            self.viewer_model2.viewer_model,
+        ]:
+            if model.dims is event.source:
+                continue
+            model.dims.current_step = event.value
 
     def _layer_added(self, event):
-        """add layer to additional viewers and connect all required events"""
+        """Add layer to additional other viewer models"""
 
-        if (
-            event.value.name not in self.viewer_model1.layers
-            and event.value.name not in self.viewer_model2.layers
-        ):
-            self.viewer_model1.layers.insert(
-                event.index, copy_layer(event.value, "model1")
-            )
-            self.viewer_model2.layers.insert(
-                event.index, copy_layer(event.value, "model2")
-            )
-            for name in get_property_names(event.value):
-                getattr(event.value.events, name).connect(
-                    own_partial(self._property_sync, name)
-                )
+        if event.value.name not in self.viewer_model1.viewer_model.layers:
+            self.viewer_model1.add_layer(event.value, event.index)
 
-            if isinstance(event.value, Labels):
-                event.value.events.set_data.connect(self._set_data_refresh)
-                self.viewer_model1.layers[event.value.name].events.set_data.connect(
-                    self._set_data_refresh
-                )
-                self.viewer_model2.layers[event.value.name].events.set_data.connect(
-                    self._set_data_refresh
-                )
+        if event.value.name not in self.viewer_model2.viewer_model.layers:
+            self.viewer_model2.add_layer(event.value, event.index)
 
-            if isinstance(event.value, LabelOptions):
-                self.viewer_model1.layers[event.value.name].mouse_drag_callbacks.append(
-                    self._sync_click
-                )
-                self.viewer_model2.layers[event.value.name].mouse_drag_callbacks.append(
-                    self._sync_click
-                )
-
-
-            # connect events
-            if event.value.name != ".cross":
-                self.viewer_model1.layers[event.value.name].events.data.connect(
-                    self._sync_data
-                )
-
-                self.viewer_model2.layers[event.value.name].events.data.connect(
-                    self._sync_data
-                )
-
-                if isinstance(self.viewer_model1.layers[event.value.name], Labels):
-                    self.viewer_model1.layers[
-                        event.value.name
-                    ].events.selected_label.connect(self._sync_selected_label)
-
-                if isinstance(self.viewer_model2.layers[event.value.name], Labels):
-                    self.viewer_model2.layers[
-                        event.value.name
-                    ].events.selected_label.connect(self._sync_selected_label)
-
-
-            event.value.events.name.connect(self._sync_name)
-
-            self._order_update()
-
-    def _sync_selected_label(self, event):
-        """Sync the selected label between Label instances"""
-
-        for model in [self.viewer, self.viewer_model1, self.viewer_model2]:
-            if event.source.name in model.layers:
-                layer = model.layers[event.source.name]
-                if layer is event.source:
-                    return
-                try:
-                    self._block = True
-                    layer.selected_label = event.source.selected_label
-                finally:
-                    self._block = False
-
-    def _sync_mode(self, event):
-        """Sync the tool mode between source viewer and other viewer models"""
-
-        for model in [self.viewer, self.viewer_model1, self.viewer_model2]:
-            if event.source.name in model.layers:
-                layer = model.layers[event.source.name]
-                if layer is event.source:
-                    continue
-                try:
-                    self._block = True
-                    layer.mode = event.source.mode
-                finally:
-                    self._block = False
-
-    def _sync_click(self, layer, event):
-        """Forward the click event to the LabelOptions layer"""
-
-        name = layer.name
-        if (
-            event.type == "mouse_press"
-            and name in self.viewer.layers
-            and isinstance(self.viewer.layers[name], LabelOptions)
-        ):
-            selected_label = layer.get_value(
-                event.position,
-                view_direction=event.view_direction,
-                dims_displayed=event.dims_displayed,
-                world=True,
-            )
-
-            coords = self.viewer.layers[name].world_to_data(event.position)
-            coords = [int(c) for c in coords]
-
-            # Process the click event on the LabelOptions layer
-            self.viewer.layers[name].copy_label(event, coords, selected_label)
-
-    def _sync_name(self, event):
-        """sync name of layers"""
-
-        try:
-            index = self.viewer.layers.index(event.source)
-            self.viewer_model1.layers[index].name = event.source.name
-            self.viewer_model2.layers[index].name = event.source.name
-        except IndexError:
-            return
-
-    def _sync_data(self, event):
-        """sync data modification from additional viewers"""
-
-        if self._block:
-            return
-        for model in [self.viewer, self.viewer_model1, self.viewer_model2]:
-            if event.source.name in model.layers:
-                layer = model.layers[event.source.name]
-                if layer is event.source:
-                    continue
-                try:
-                    self._block = True
-                    layer.data = event.source.data
-                finally:
-                    self._block = False
-
-    def _set_data_refresh(self, event):
-        """
-        synchronize data refresh between layers
-        """
-        if self._block:
-            return
-        for model in [self.viewer, self.viewer_model1, self.viewer_model2]:
-            if event.source.name in model.layers:
-                layer = model.layers[event.source.name]
-                if layer is event.source:
-                    continue
-                try:
-                    self._block = True
-                    layer.refresh()
-                finally:
-                    self._block = False
+        self.set_orth_views_dims_order()
 
     def _layer_removed(self, event):
-        """remove layer in all viewers"""
+        """Remove layer in all viewer models"""
 
         layer_name = event.value.name
-        if layer_name in self.viewer_model1.layers:
-            self.viewer_model1.layers.pop(layer_name)
-        if layer_name in self.viewer_model2.layers:
-            self.viewer_model2.layers.pop(layer_name)
+        if layer_name in self.viewer_model1.viewer_model.layers:
+            self.viewer_model1.viewer_model.layers.pop(layer_name)
+        if layer_name in self.viewer_model2.viewer_model.layers:
+            self.viewer_model2.viewer_model.layers.pop(layer_name)
+
+        self.set_orth_views_dims_order()
 
     def _layer_moved(self, event):
-        """update order of layers"""
+        """Update order of layers in all viewer models"""
 
         dest_index = (
             event.new_index if event.new_index < event.index else event.new_index + 1
         )
-        self.viewer_model1.layers.move(event.index, dest_index)
-        self.viewer_model2.layers.move(event.index, dest_index)
-
-    def _property_sync(self, name, event):
-        """Sync layers properties (except the name)"""
-
-        if event.source.name not in self.viewer.layers:
-            return
-        try:
-            self._block = True
-            if event.source.name in self.viewer_model1.layers:
-                setattr(
-                    self.viewer_model1.layers[event.source.name],
-                    name,
-                    getattr(event.source, name),
-                )
-            if event.source.name in self.viewer_model2.layers:
-                setattr(
-                    self.viewer_model2.layers[event.source.name],
-                    name,
-                    getattr(event.source, name),
-                )
-        finally:
-            self._block = False
+        self.viewer_model1.viewer_model.layers.move(event.index, dest_index)
+        self.viewer_model2.viewer_model.layers.move(event.index, dest_index)

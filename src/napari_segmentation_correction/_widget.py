@@ -50,6 +50,9 @@ class AnnotateLabelsND(QWidget):
         self.tab_widget = QTabWidget(self)
         self.option_labels = None
 
+        ### connect event to switch ndisplay because the otherwise the orthogonal views might be frozen (bug)
+        self.viewer.dims.events.ndisplay.connect(self.update_3D_tab)
+
         ### specify output directory
         outputbox_layout = QHBoxLayout()
         self.outputdirbtn = QPushButton("Select output directory")
@@ -151,7 +154,11 @@ class AnnotateLabelsND(QWidget):
             self.output_path.setText(path)
             self.outputdir = str(self.output_path.text())
 
-
+    def update_3D_tab(self):
+        """Silly workaround to ensure that the orthongal views are updated when switching ndims displayed"""
+        if self.tab_widget.currentIndex() == 0:
+            self.tab_widget.setCurrentIndex(1)
+            self.tab_widget.setCurrentIndex(0)
 
     def _save_labels(self) -> None:
         """Save the currently active labels layer. If it consists of multiple timepoints, they are written to multiple 3D stacks."""

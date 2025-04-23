@@ -47,7 +47,7 @@ class ColoredTableWidget(TableWidget):
             if 'time_point' in self._table:
                 t = int(self._table["time_point"][row])
                 new_step = (t, z, current_step[2], current_step[3])
-            else: 
+            else:
                 new_step = (z, current_step[1], current_step[2])
         elif len(current_step) == 3:
             if 'time_point' in self._table:

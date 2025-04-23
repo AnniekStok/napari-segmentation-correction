@@ -1,13 +1,16 @@
+from typing import Union
+
 import dask.array as da
 import napari
 import numpy as np
+from napari.utils.events import Event
 from qtpy.QtWidgets import (
     QMessageBox,
 )
 
 from .layer_manager import LayerManager
-from typing import Union
-from napari.utils.events import Event
+
+
 class LabelOptions(napari.layers.Labels):
     """Extended labels layer that holds the track information and emits and responds to dynamics visualization signals"""
 
@@ -45,7 +48,7 @@ class LabelOptions(napari.layers.Labels):
 
     def copy_label(self, event: Event, coords: list[int], selected_label: int) -> None:
         """Copy a 2D or 3D label from this layer to a target layer"""
-       
+
         dims_displayed = event.dims_displayed
         ndims_options = len(self.data.shape)
         ndims_label = len(self.label_manager.selected_layer.data.shape)
@@ -69,7 +72,7 @@ class LabelOptions(napari.layers.Labels):
 
         elif event.type == "mouse_press" and "Shift" in event.modifiers: # copy a volume label
             self.copy_volume_label(ndims, ndims_options, ndims_label, coords, selected_label)
-        
+
         # refresh the layer
         self.label_manager.selected_layer.data = (
             self.label_manager.selected_layer.data
@@ -99,7 +102,7 @@ class LabelOptions(napari.layers.Labels):
             slices[i] = coord
 
         self.copy(slices, ndims_options, ndims_label, coords, selected_label)
-   
+
     def copy_slice_label(self, ndims: int, dims_displayed: int, ndims_options: int, ndims_label: int, coords: list[int], selected_label: int) -> None:
 
         # Create a list of `slice(None)` for all dimensions of self.data
@@ -109,12 +112,12 @@ class LabelOptions(napari.layers.Labels):
             for i in range(ndims):
                 if i not in dims_displayed:
                     slices[i] = coords[i]  # Replace the slice with a specific coordinate for slider dims
-        
+
             self.copy(slices, ndims_options, ndims_label, coords, selected_label)
 
     def copy(self, slices: list[Union[int, slice]], ndims_options: int, ndims_label: int, coords: list[int], selected_label: int) -> None:
         """Copy a label from the options layer to the target layer"""
-        
+
         # Clip coords to the shape of the label manager's data
         coords_clipped, label_slices = self.clip_coords(slices, ndims_options, ndims_label, coords)
 
@@ -132,9 +135,9 @@ class LabelOptions(napari.layers.Labels):
         else:
             self.set_label_numpy_array(label_slices, coords_clipped, mask)
 
-    def clip_coords(self, slices: list[Union[int, slice]], ndims_options: int, ndims_label: int, coords: list[int]) -> tuple[list[int], list[int]]: 
+    def clip_coords(self, slices: list[Union[int, slice]], ndims_options: int, ndims_label: int, coords: list[int]) -> tuple[list[int], list[int]]:
         """Clip the coordinates to the shape of the target data"""
-        
+
         if ndims_options == ndims_label + 1:
             coords_clipped = coords[1:]
             label_slices = slices[1:]
@@ -144,9 +147,9 @@ class LabelOptions(napari.layers.Labels):
         else:
             coords_clipped = coords
             label_slices = slices
-        
+
         return coords_clipped, label_slices
-    
+
     def set_label_numpy_array(self, label_slices: list[int], coords_clipped: list[int], mask: np.ndarray) -> None:
         """Set the new label in the target stack of a numpy array"""
 
@@ -162,7 +165,7 @@ class LabelOptions(napari.layers.Labels):
                 self.label_manager.selected_layer.data = self.label_manager.selected_layer.data.astype(np.uint32)
             elif msg.clickedButton() == msg.button(QMessageBox.Cancel):  # Check if Cancel was clicked
                 return False
-        
+
         orig_label = self.label_manager.selected_layer.data[tuple(coords_clipped)]
         sliced_data = self.label_manager.selected_layer.data[tuple(label_slices)]
 
@@ -175,7 +178,7 @@ class LabelOptions(napari.layers.Labels):
 
         # Assign the modified slice back to the original data
         self.label_manager.selected_layer.data[tuple(label_slices)] = sliced_data
-    
+
     def set_label_dask_array(self, label_slices: list[int], coords_clipped: list[int], mask: np.ndarray) -> None:
         """Set the label in the target stack for dask arrays"""
 
@@ -196,7 +199,7 @@ class LabelOptions(napari.layers.Labels):
                 self.label_manager.selected_layer.data = self.label_manager.selected_layer.data.astype(np.uint32)  # Convert entire layer to 32 bit
             elif msg.clickedButton() == msg.button(QMessageBox.Cancel):  # Check if Cancel was clicked
                 return False
-            
+
         orig_label = target_stack[tuple(coords_clipped[1:])]
         orig_mask = sliced_data == orig_label  # Mask must have the same shape as sliced_data
         sliced_data[orig_mask] = 0

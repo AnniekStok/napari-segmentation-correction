@@ -273,7 +273,7 @@ class SelectDeleteMask(QWidget):
                     ].compute()  # Compute the current stack
 
                     if isinstance(self.mask_layer.data, da.core.Array):
-                        to_keep = np.unique(current_stack[self.mask_layer.data[i].compute() > 0])                       
+                        to_keep = np.unique(current_stack[self.mask_layer.data[i].compute() > 0])
                     else:
                         to_keep = np.unique(current_stack[self.mask_layer.data[i] > 0])
 

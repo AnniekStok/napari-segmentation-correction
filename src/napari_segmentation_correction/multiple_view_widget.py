@@ -115,7 +115,7 @@ class DockableViewerModel:
                     source=orig_layer, target=copied_layer, event=event
                 )  # copy data from orig_layer to copied_layer (copied_layer emits signal but we don't process it)
             )
-        
+
         if isinstance(orig_layer, LabelOptions):
 
             # sync click events

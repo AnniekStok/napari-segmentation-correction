@@ -134,6 +134,7 @@ class ErosionDilationWidget(QWidget):
             self.label_manager.selected_layer = self.viewer.add_labels(
                 da.stack([imread(fname) for fname in sorted(file_list)]),
                 name=self.label_manager.selected_layer.name + "_eroded",
+                scale=self.label_manager.selected_layer.scale
             )
             self.label_manager._update_labels(
                 self.label_manager.selected_layer.name
@@ -163,6 +164,7 @@ class ErosionDilationWidget(QWidget):
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     np.stack(stack, axis=0),
                     name=self.label_manager.selected_layer.name + "_eroded",
+                    scale=self.label_manager.selected_layer.scale
                 )
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name
@@ -180,6 +182,7 @@ class ErosionDilationWidget(QWidget):
                         eroded_mask, self.label_manager.selected_layer.data, 0
                     ),
                     name=self.label_manager.selected_layer.name + "_eroded",
+                    scale=self.label_manager.selected_layer.scale
                 )
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name
@@ -236,6 +239,7 @@ class ErosionDilationWidget(QWidget):
             self.label_manager.selected_layer = self.viewer.add_labels(
                 da.stack([imread(fname) for fname in sorted(file_list)]),
                 name=self.label_manager.selected_layer.name + "_dilated",
+                scale=self.label_manager.selected_layer.scale
             )
             self.label_manager._update_labels(
                 self.label_manager.selected_layer.name
@@ -257,6 +261,7 @@ class ErosionDilationWidget(QWidget):
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     np.stack(stack, axis=0),
                     name=self.label_manager.selected_layer.name + "_dilated",
+                    scale=self.label_manager.selected_layer.scale
                 )
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name
@@ -272,6 +277,7 @@ class ErosionDilationWidget(QWidget):
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     expanded_labels,
                     name=self.label_manager.selected_layer.name + "_dilated",
+                    scale=self.label_manager.selected_layer.scale
                 )
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name

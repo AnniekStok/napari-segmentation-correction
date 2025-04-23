@@ -123,6 +123,7 @@ class ThresholdWidget(QWidget):
             self.viewer.add_labels(
                 da.stack([imread(fname) for fname in sorted(file_list)]),
                 name=self.threshold_layer.name + "_thresholded",
+                scale=self.threshold_layer.scale
             )
 
         else:
@@ -130,5 +131,6 @@ class ThresholdWidget(QWidget):
                 self.threshold_layer.data >= int(self.min_threshold.value())
             ) & (self.threshold_layer.data <= int(self.max_threshold.value()))
             self.viewer.add_labels(
-                thresholded, name=self.threshold_layer.name + "_thresholded"
+                thresholded, name=self.threshold_layer.name + "_thresholded",
+                scale=self.threshold_layer.scale
             )

@@ -106,6 +106,7 @@ class SmoothingWidget(QWidget):
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
                     name=self.label_manager.selected_layer.name + "_smoothed",
+                    scale=self.label_manager.selected_layer.scale
                 )
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name
@@ -125,6 +126,7 @@ class SmoothingWidget(QWidget):
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     np.stack(stack, axis=0),
                     name=self.label_manager.selected_layer.name + "_smoothed",
+                    scale=self.label_manager.selected_layer.scale
                 )
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name
@@ -137,6 +139,7 @@ class SmoothingWidget(QWidget):
                         size=self.median_radius_field.value(),
                     ),
                     name=self.label_manager.selected_layer.name + "_smoothed",
+                    scale=self.label_manager.selected_layer.scale
                 )
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name

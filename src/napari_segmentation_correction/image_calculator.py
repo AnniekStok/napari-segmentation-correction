@@ -108,15 +108,18 @@ class ImageCalculator(QWidget):
 
         if self.operation.currentText() == "Add":
             self.viewer.add_image(
-                np.add(self.image1_layer.data, self.image2_layer.data)
+                np.add(self.image1_layer.data, self.image2_layer.data),
+                scale = self.image1_layer.scale,
             )
         if self.operation.currentText() == "Subtract":
             self.viewer.add_image(
-                np.subtract(self.image1_layer.data, self.image2_layer.data)
+                np.subtract(self.image1_layer.data, self.image2_layer.data),
+                scale = self.image1_layer.scale,
             )
         if self.operation.currentText() == "Multiply":
             self.viewer.add_image(
-                np.multiply(self.image1_layer.data, self.image2_layer.data)
+                np.multiply(self.image1_layer.data, self.image2_layer.data),
+                scale = self.image1_layer.scale,
             )
         if self.operation.currentText() == "Divide":
             self.viewer.add_image(
@@ -125,17 +128,20 @@ class ImageCalculator(QWidget):
                     self.image2_layer.data,
                     out=np.zeros_like(self.image1_layer.data, dtype=float),
                     where=self.image2_layer.data != 0,
-                )
+                ),
+                scale = self.image1_layer.scale,
             )
         if self.operation.currentText() == "AND":
             self.viewer.add_labels(
                 np.logical_and(
                     self.image1_layer.data != 0, self.image2_layer.data != 0
-                ).astype(int)
+                ).astype(int),
+                scale = self.image1_layer.scale,
             )
         if self.operation.currentText() == "OR":
             self.viewer.add_labels(
                 np.logical_or(
                     self.image1_layer.data != 0, self.image2_layer.data != 0
-                ).astype(int)
+                ).astype(int),
+                scale = self.image1_layer.scale,
             )

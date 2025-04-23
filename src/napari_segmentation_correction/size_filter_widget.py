@@ -113,6 +113,7 @@ class SizeFilterWidget(QWidget):
                 da.stack([imread(fname) for fname in sorted(file_list)]),
                 name=self.label_manager.selected_layer.name
                 + "_sizefiltered",
+                scale=self.label_manager.selected_layer.scale
             )
             self.label_manager._update_labels(
                 self.label_manager.selected_layer.name
@@ -148,6 +149,7 @@ class SizeFilterWidget(QWidget):
                     np.stack(stack, axis=0),
                     name=self.label_manager.selected_layer.name
                     + "_sizefiltered",
+                    scale=self.label_manager.selected_layer.scale
                 )
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name
@@ -178,6 +180,7 @@ class SizeFilterWidget(QWidget):
                     np.where(mask, self.label_manager.selected_layer.data, 0),
                     name=self.label_manager.selected_layer.name
                     + "_sizefiltered",
+                    scale=self.label_manager.selected_layer.scale
                 )
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name

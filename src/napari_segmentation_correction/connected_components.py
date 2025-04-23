@@ -8,7 +8,6 @@ import tifffile
 from qtpy.QtWidgets import (
     QFileDialog,
     QGroupBox,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -85,6 +84,7 @@ class ConnectedComponents(QWidget):
             self.label_manager.selected_layer = self.viewer.add_labels(
                 da.stack([imread(fname) for fname in sorted(file_list)]),
                 name=self.label_manager.selected_layer.name + "_conn_comp",
+                scale=self.label_manager.selected_layer.scale
             )
             self.label_manager._update_labels(
                 self.label_manager.selected_layer.name
@@ -102,65 +102,8 @@ class ConnectedComponents(QWidget):
 
             self.label_manager.selected_layer = self.viewer.add_labels(conn_comp,
                 name=self.label_manager.selected_layer.name + "_conn_comp",
+                scale=self.label_manager.selected_layer.scale
             )
             self.label_manager._update_labels(
                 self.label_manager.selected_layer.name
-            )
-
-    def _calculate_images(self):
-        """Add label image 2 to label image 1"""
-
-        if isinstance(self.image1_layer, da.core.Array) or isinstance(
-            self.image2_layer, da.core.Array
-        ):
-            msg = QMessageBox()
-            msg.setWindowTitle(
-                "Cannot yet run image calculator on dask arrays"
-            )
-            msg.setText("Cannot yet run image calculator on dask arrays")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-        if self.image1_layer.data.shape != self.image2_layer.data.shape:
-            msg = QMessageBox()
-            msg.setWindowTitle("Images must have the same shape")
-            msg.setText("Images must have the same shape")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-
-        if self.operation.currentText() == "Add":
-            self.viewer.add_image(
-                np.add(self.image1_layer.data, self.image2_layer.data)
-            )
-        if self.operation.currentText() == "Subtract":
-            self.viewer.add_image(
-                np.subtract(self.image1_layer.data, self.image2_layer.data)
-            )
-        if self.operation.currentText() == "Multiply":
-            self.viewer.add_image(
-                np.multiply(self.image1_layer.data, self.image2_layer.data)
-            )
-        if self.operation.currentText() == "Divide":
-            self.viewer.add_image(
-                np.divide(
-                    self.image1_layer.data,
-                    self.image2_layer.data,
-                    out=np.zeros_like(self.image1_layer.data, dtype=float),
-                    where=self.image2_layer.data != 0,
-                )
-            )
-        if self.operation.currentText() == "AND":
-            self.viewer.add_labels(
-                np.logical_and(
-                    self.image1_layer.data != 0, self.image2_layer.data != 0
-                ).astype(int)
-            )
-        if self.operation.currentText() == "OR":
-            self.viewer.add_labels(
-                np.logical_or(
-                    self.image1_layer.data != 0, self.image2_layer.data != 0
-                ).astype(int)
             )

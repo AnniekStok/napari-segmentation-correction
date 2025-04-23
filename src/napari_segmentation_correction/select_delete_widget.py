@@ -175,6 +175,7 @@ class SelectDeleteMask(QWidget):
                     self.image1_layer = self.viewer.add_labels(
                         da.stack([imread(fname) for fname in sorted(file_list)]),
                         name=self.image1_layer.name + "_filtered_labels",
+                        scale=self.image1_layer.scale
                     )
 
                 else:
@@ -243,6 +244,7 @@ class SelectDeleteMask(QWidget):
                     self.image1_layer = self.viewer.add_labels(
                         da.stack([imread(fname) for fname in file_list]),
                         name=self.image1_layer.name + "_filtered_labels",
+                        scale=self.image1_layer.scale
                     )
 
                 else:
@@ -301,11 +303,14 @@ class SelectDeleteMask(QWidget):
                 self.image1_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
                     name=self.image1_layer.name + "_filtered_labels",
+                    scale=self.image1_layer.scale
                 )
             else:
                 to_keep = np.unique(self.image1_layer.data[self.mask_layer.data > 0])
                 filtered_mask = functools.reduce(np.logical_or, (self.image1_layer.data==val for val in to_keep))
-                self.viewer.add_labels(np.where(filtered_mask, self.image1_layer.data, 0), name="selected labels")
+                self.viewer.add_labels(np.where(filtered_mask, self.image1_layer.data, 0),
+                                       name="selected labels",
+                                       scale=self.image1_layer.scale)
 
         else:
             msg = QMessageBox()
@@ -381,6 +386,7 @@ class SelectDeleteMask(QWidget):
                     self.image1_layer = self.viewer.add_labels(
                         da.stack([imread(fname) for fname in sorted(file_list)]),
                         name=self.image1_layer.name + "_filtered_labels",
+                        scale=self.image1_layer.scale
                     )
 
                 else:
@@ -447,6 +453,7 @@ class SelectDeleteMask(QWidget):
                     self.image1_layer = self.viewer.add_labels(
                         da.stack([imread(fname) for fname in file_list]),
                         name=self.image1_layer.name + "_filtered_labels",
+                        scale=self.image1_layer.scale
                     )
 
                 else:
@@ -499,10 +506,11 @@ class SelectDeleteMask(QWidget):
                 self.image1_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
                     name=self.image1_layer.name + "_filtered_labels",
+                    scale=self.image1_layer.scale
                 )
             else:
                 to_delete = np.unique(self.image1_layer.data[self.mask_layer.data > 0])
-                selected_labels = self.viewer.add_labels(copy.deepcopy(self.image1_layer.data), name="selected_self.image1_layer.data")
+                selected_labels = self.viewer.add_labels(copy.deepcopy(self.image1_layer.data), name=self.image1_layer.name + "_filtered_labels", scale=self.image1_layer.scale)
                 for label in to_delete:
                     selected_labels.data[selected_labels.data == label] = 0
 

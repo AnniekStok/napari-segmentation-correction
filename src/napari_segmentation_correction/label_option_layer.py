@@ -66,17 +66,12 @@ class LabelOptions(napari.layers.Labels):
             msg.setStandardButtons(QMessageBox.Ok)
             msg.exec_()
             return False
-
+        
         if event.type == "mouse_press" and event.button == 2: # copy a single slice only
             self.copy_slice_label(ndims, dims_displayed, ndims_options, ndims_label, coords, selected_label)
 
         elif event.type == "mouse_press" and "Shift" in event.modifiers: # copy a volume label
             self.copy_volume_label(ndims, ndims_options, ndims_label, coords, selected_label)
-
-        # refresh the layer
-        self.label_manager.selected_layer.data = (
-            self.label_manager.selected_layer.data
-        )
 
     def copy_volume_label(self, ndims: int, ndims_options: int, ndims_label: int, coords: list[int], selected_label: int) -> None:
         """Copy a volume label from the options layer to the target layer"""
@@ -84,36 +79,73 @@ class LabelOptions(napari.layers.Labels):
         options_shape = self.data.shape
         labels_shape = self.label_manager.selected_layer.data.shape
 
-        overlapping_dims = []
-        for i in range(min(ndims_options, ndims_label)):
-            if options_shape[-i-1] == labels_shape[-i-1]:
-                overlapping_dims.append(options_shape[-i-1])
-            else:
-                break
-            overlapping_dims.reverse()
+        # Always compare the last 2 or 3 dims (y, x or z, y, x)
+        spatial_dims = min(3, min(len(options_shape), len(labels_shape)))
+        options_spatial = options_shape[-spatial_dims:]
+        labels_spatial = labels_shape[-spatial_dims:]
 
-        # we copy the overlapping dims, but max 3
+        if options_spatial != labels_spatial:
+            msg = QMessageBox()
+            msg.setWindowTitle("Invalid dimensions!")
+            msg.setText(
+                f"The spatial dimensions (z, y, x) of the options layer and the target layer do not match.\n"
+                f"Label options layer has shape {options_shape}, target layer has shape {labels_shape}.\n"
+                f"Compared last {spatial_dims} dims: {options_spatial} vs {labels_spatial}."
+            )
+            msg.setIcon(QMessageBox.Information)
+            msg.setStandardButtons(QMessageBox.Ok)
+            msg.exec_()
+            return False
+
+        # Now calculate the remaining coords for the non-spatial dims
+        if spatial_dims == 3:
+            remaining_coords = coords[:-(3)]
+        elif spatial_dims == 2:
+            remaining_coords = coords[:-(2)]
+        else:
+            remaining_coords = []
+
         slices = [slice(None)] * ndims
-        if len(overlapping_dims) >= 3:
-            remaining_coords = coords[:-3]
-        elif len(overlapping_dims) == 2:
-            remaining_coords = coords[:-2]
         for i, coord in enumerate(remaining_coords):
             slices[i] = coord
 
         self.copy(slices, ndims_options, ndims_label, coords, selected_label)
 
-    def copy_slice_label(self, ndims: int, dims_displayed: int, ndims_options: int, ndims_label: int, coords: list[int], selected_label: int) -> None:
+    def copy_slice_label(
+        self,
+        ndims: int,
+        dims_displayed: int,
+        ndims_options: int,
+        ndims_label: int,
+        coords: list[int],
+        selected_label: int,
+    ) -> None:
+        # Determine how many spatial dims to check (2 or 3)
+        spatial_dims = min(3, min(len(self.data.shape), len(self.label_manager.selected_layer.data.shape)))
+        options_shape = self.data.shape[-spatial_dims:]
+        target_shape = self.label_manager.selected_layer.data.shape[-spatial_dims:]
+
+        if options_shape != target_shape:
+            msg = QMessageBox()
+            msg.setWindowTitle("Invalid dimensions!")
+            msg.setText(
+                f"The spatial dimensions of the options layer and the target layer do not match.\n"
+                f"Label options layer has shape {self.data.shape}, target layer has shape {self.label_manager.selected_layer.data.shape}.\n"
+                f"Last {spatial_dims} dims: {options_shape} vs {target_shape}."
+            )
+            msg.setIcon(QMessageBox.Information)
+            msg.setStandardButtons(QMessageBox.Ok)
+            msg.exec_()
+            return False
 
         # Create a list of `slice(None)` for all dimensions of self.data
-            slices = [slice(None)] * ndims
-            if ndims_options == ndims_label - 1:
-                dims_displayed = [dim-1 for dim in dims_displayed]
-            for i in range(ndims):
-                if i not in dims_displayed:
-                    slices[i] = coords[i]  # Replace the slice with a specific coordinate for slider dims
-
-            self.copy(slices, ndims_options, ndims_label, coords, selected_label)
+        slices = [slice(None)] * ndims
+        if ndims_options == ndims_label - 1:
+            dims_displayed = [dim - 1 for dim in dims_displayed]
+        for i in range(ndims):
+            if i not in dims_displayed:
+                slices[i] = coords[i]  # Replace the slice with a specific coordinate for slider dims
+        self.copy(slices, ndims_options, ndims_label, coords, selected_label)
 
     def copy(self, slices: list[Union[int, slice]], ndims_options: int, ndims_label: int, coords: list[int], selected_label: int) -> None:
         """Copy a label from the options layer to the target layer"""
@@ -134,6 +166,11 @@ class LabelOptions(napari.layers.Labels):
             self.set_label_dask_array(label_slices, coords_clipped, mask)
         else:
             self.set_label_numpy_array(label_slices, coords_clipped, mask)
+
+        # refresh the layer
+        self.label_manager.selected_layer.data = (
+            self.label_manager.selected_layer.data
+        )
 
     def clip_coords(self, slices: list[Union[int, slice]], ndims_options: int, ndims_label: int, coords: list[int]) -> tuple[list[int], list[int]]:
         """Clip the coordinates to the shape of the target data"""

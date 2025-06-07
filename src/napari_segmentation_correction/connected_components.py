@@ -28,7 +28,6 @@ class ConnectedComponents(QWidget):
         self.label_manager = label_manager
         self.outputdir = None
 
-        ### Add one image to another
         conn_comp_box = QGroupBox("Connected Component Analysis")
         conn_comp_box_layout = QVBoxLayout()
 

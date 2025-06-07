@@ -31,6 +31,7 @@ from .select_delete_widget import SelectDeleteMask
 from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
+from .label_interpolator import InterpolationWidget
 from .view3D import View3D
 
 
@@ -125,6 +126,10 @@ class AnnotateLabelsND(QWidget):
         select_del = SelectDeleteMask(self.viewer)
         self.edit_layout.addWidget(select_del)
 
+        # Add widget for interpolating masks
+        interpolation_widget = InterpolationWidget(self.viewer, self.label_manager)
+        self.edit_layout.addWidget(interpolation_widget)
+
         ## add 3d viewing widget
         self.view3d_widget = View3D(self.viewer)
         self.tab_widget.addTab(self.view3d_widget, "3D Viewing")
@@ -191,7 +196,7 @@ class AnnotateLabelsND(QWidget):
                             + ".tif"
                         ),
                     ),
-                    np.array(current_stack, dtype="uint16"),
+                    np.array(current_stack),
                 )
 
         elif len(self.label_manager.selected_layer.data.shape) == 4:

@@ -64,9 +64,14 @@ class ErosionDilationWidget(QWidget):
         shrink_dilate_buttons_layout.addWidget(self.erode_btn)
         shrink_dilate_buttons_layout.addWidget(self.dilate_btn)
 
-        if self.label_manager.selected_layer is not None:
-            self.erode_btn.setEnabled(True)
-            self.dilate_btn.setEnabled(True)
+        self.erode_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        self.label_manager.layer_update.connect(
+            lambda: self.erode_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        )
+        self.dilate_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        self.label_manager.layer_update.connect(
+            lambda: self.dilate_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        )
 
         dil_erode_box_layout.addLayout(radius_layout)
         dil_erode_box_layout.addLayout(iterations_layout)

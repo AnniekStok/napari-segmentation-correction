@@ -12,13 +12,14 @@ class LayerDropdown(QComboBox):
         super().__init__()
         self.viewer = viewer
         self.layer_type = layer_type
+        self.selected_layer = None
         self.viewer.layers.events.inserted.connect(self._on_insert)
         self.viewer.layers.events.changed.connect(self._update_dropdown)
         self.viewer.layers.events.removed.connect(self._update_dropdown)
         self.viewer.layers.selection.events.changed.connect(
             self._on_selection_changed
         )
-        self.currentIndexChanged.connect(self._emit_layer_changed)
+        self.currentTextChanged.connect(self._emit_layer_changed)
         self._update_dropdown()
 
     def _on_insert(self, event) -> None:
@@ -67,5 +68,6 @@ class LayerDropdown(QComboBox):
     def _emit_layer_changed(self) -> None:
         """Emit a signal holding the currently selected layer"""
 
-        selected_layer = self.currentText()
-        self.layer_changed.emit(selected_layer)
+        selected_layer_name = self.currentText()
+        self.selected_layer = self.viewer.layers.get(selected_layer_name, None)
+        self.layer_changed.emit(selected_layer_name)

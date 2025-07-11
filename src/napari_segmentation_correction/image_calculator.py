@@ -57,6 +57,10 @@ class ImageCalculator(QWidget):
 
         add_images_btn = QPushButton("Run")
         add_images_btn.clicked.connect(self._calculate_images)
+        add_images_btn.setEnabled(self.image1_dropdown.selected_layer is not None and self.image2_dropdown.selected_layer is not None)
+        self.image1_dropdown.layer_changed.connect(lambda: add_images_btn.setEnabled(self.image1_dropdown.selected_layer is not None and self.image2_dropdown.selected_layer is not None))
+        self.image2_dropdown.layer_changed.connect(lambda: add_images_btn.setEnabled(self.image1_dropdown.selected_layer is not None and self.image2_dropdown.selected_layer is not None))
+
         image_calc_box_layout.addWidget(add_images_btn)
 
         image_calc_box.setLayout(image_calc_box_layout)

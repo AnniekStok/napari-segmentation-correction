@@ -1,4 +1,5 @@
 import napari
+from napari.layers import Labels
 from qtpy.QtWidgets import (
     QGroupBox,
     QPushButton,
@@ -24,19 +25,30 @@ class CopyLabelWidget(QWidget):
         copy_labels_box = QGroupBox("Copy-paste labels")
         copy_labels_layout = QVBoxLayout()
 
-        convert_to_option_layer_btn = QPushButton(
+        self.convert_to_option_layer_btn = QPushButton(
             "Convert current labels layer to label options layer"
         )
-        convert_to_option_layer_btn.clicked.connect(
+        self.convert_to_option_layer_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels))
+        self.convert_to_option_layer_btn.clicked.connect(
             self._convert_to_option_layer
         )
 
-        copy_labels_layout.addWidget(convert_to_option_layer_btn)
+        copy_labels_layout.addWidget(self.convert_to_option_layer_btn)
         copy_labels_box.setLayout(copy_labels_layout)
+
+        self.label_manager.layer_update.connect(self._update_btn)
 
         layout = QVBoxLayout()
         layout.addWidget(copy_labels_box)
         self.setLayout(layout)
+
+    def _update_btn(self) -> None:
+        """Make sure the button is only available when a labels layer is selected"""
+
+        if isinstance(self.label_manager._selected_layer, Labels):
+            self.convert_to_option_layer_btn.setEnabled(True)
+        else:
+            self.convert_to_option_layer_btn.setEnabled(False)
 
     def _convert_to_option_layer(self) -> None:
 

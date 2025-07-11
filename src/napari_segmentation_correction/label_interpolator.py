@@ -11,16 +11,12 @@ from qtpy.QtWidgets import (
     QPushButton,
     QVBoxLayout,
     QWidget,
-    QLabel,
-    QComboBox
 )
+from scipy.ndimage import distance_transform_edt
 from skimage.io import imread
+
 from .layer_manager import LayerManager
-from scipy.ndimage import distance_transform_edt
 
-
-import numpy as np
-from scipy.ndimage import distance_transform_edt
 
 def signed_distance_transform(mask):
     mask = mask.astype(bool)
@@ -31,11 +27,9 @@ def signed_distance_transform(mask):
 def interpolate_binary_mask(mask):
     """
     Interpolates a sparse binary mask array using SDTs along the first axis.
-    
     Args:
-        mask (ndarray): Binary array of shape (T, X, Y, Z) or (X, Y, Z), etc., 
+        mask (ndarray): Binary array of shape (T, X, Y, Z) or (X, Y, Z), etc.,
                         where some slices along 'axis' contain valid masks
-    
     Returns:
         ndarray: Binary array of same shape with interpolated masks along 'axis'
     """
@@ -70,9 +64,11 @@ class InterpolationWidget(QWidget):
 
         interpolator_box = QGroupBox("Interpolate mask")
         interpolator_box_layout = QVBoxLayout()
- 
+
         run_btn = QPushButton("Run interpolation along first axis")
         run_btn.clicked.connect(self._interpolate)
+        run_btn.setEnabled(self.label_manager._selected_layer is not None)
+        self.label_manager.layer_update.connect(lambda: run_btn.setEnabled(self.label_manager._selected_layer is not None))
         interpolator_box_layout.addWidget(run_btn)
 
         interpolator_box.setLayout(interpolator_box_layout)
@@ -102,12 +98,12 @@ class InterpolationWidget(QWidget):
                 current_stack = self.label_manager.selected_layer.data[
                     i
                 ].compute()  # Compute the current stack
-                
+
                 in_memory_stack.append(current_stack)
 
             in_memory_stack = np.stack(in_memory_stack, axis=0)
             interpolated = interpolate_binary_mask(in_memory_stack)
-            
+
             for i in range(interpolated.shape[0]):
                 tifffile.imwrite(
                     os.path.join(
@@ -137,7 +133,7 @@ class InterpolationWidget(QWidget):
             )
             return True
         else:
-            interpolated = interpolate_binary_mask(self.label_manager.selected_layer.data)   
+            interpolated = interpolate_binary_mask(self.label_manager.selected_layer.data)
 
             self.label_manager.selected_layer = self.viewer.add_labels(interpolated,
                 name=self.label_manager.selected_layer.name + "_interpolated",

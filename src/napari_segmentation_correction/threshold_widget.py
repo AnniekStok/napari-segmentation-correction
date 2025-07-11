@@ -59,8 +59,13 @@ class ThresholdWidget(QWidget):
         threshold_box_layout.addLayout(max_threshold_layout)
         threshold_btn = QPushButton("Run")
         threshold_btn.clicked.connect(self._threshold)
-        threshold_box_layout.addWidget(threshold_btn)
 
+        threshold_btn.setEnabled(isinstance(self.threshold_layer_dropdown.selected_layer, napari.layers.Labels | napari.layers.Image))
+        self.threshold_layer_dropdown.layer_changed.connect(
+            lambda: threshold_btn.setEnabled(isinstance(self.threshold_layer_dropdown.selected_layer, napari.layers.Labels | napari.layers.Image))
+        )
+
+        threshold_box_layout.addWidget(threshold_btn)
         threshold_box.setLayout(threshold_box_layout)
 
         layout = QVBoxLayout()

@@ -33,6 +33,11 @@ class ConnectedComponents(QWidget):
 
         run_btn = QPushButton("Run")
         run_btn.clicked.connect(self._conn_comp)
+        run_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        self.label_manager.layer_update.connect(
+            lambda: run_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        )
+
         conn_comp_box_layout.addWidget(run_btn)
 
         conn_comp_box.setLayout(conn_comp_box_layout)

@@ -9,6 +9,7 @@ import dask.array as da
 import napari
 import numpy as np
 import tifffile
+from napari.layers import Labels
 from qtpy.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -24,6 +25,7 @@ from .connected_components import ConnectedComponents
 from .copy_label_widget import CopyLabelWidget
 from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
+from .label_interpolator import InterpolationWidget
 from .layer_manager import LayerManager
 from .point_filter import PointFilter
 from .regionprops_widget import RegionPropsWidget
@@ -31,7 +33,6 @@ from .select_delete_widget import SelectDeleteMask
 from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
-from .label_interpolator import InterpolationWidget
 from .view3D import View3D
 
 
@@ -74,13 +75,20 @@ class AnnotateLabelsND(QWidget):
         self.table_btn.clicked.connect(
             lambda: self.tab_widget.setCurrentIndex(2)
         )
-        if self.label_manager.selected_layer is not None:
-            self.table_btn.setEnabled(True)
+        self.table_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels))
+        self.label_manager.layer_update.connect(
+            lambda: self.table_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        )
         self.edit_layout.addWidget(self.table_btn)
 
         ## Add save labels widget
         self.save_btn = QPushButton("Save labels")
         self.save_btn.clicked.connect(self._save_labels)
+        self.save_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels))
+        self.label_manager.layer_update.connect(
+            lambda: self.save_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        )
+
         self.edit_layout.addWidget(self.save_btn)
 
         ## Add button to clear all layers

@@ -3,7 +3,7 @@ import functools
 import dask.array as da
 import napari
 import numpy as np
-from napari.layers import Points
+from napari.layers import Labels, Points
 from qtpy.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
@@ -26,6 +26,7 @@ class PointFilter(QWidget):
 
         self.viewer = viewer
         self.label_manager = label_manager
+        self.points = None
 
         point_filter_box = QGroupBox("Select objects with points")
         point_filter_layout = QVBoxLayout()
@@ -37,6 +38,10 @@ class PointFilter(QWidget):
         self.keep_pts_btn.clicked.connect(self._keep_objects)
         self.remove_pts_btn = QPushButton("Remove")
         self.remove_pts_btn.clicked.connect(self._delete_objects)
+
+        self.label_manager.layer_update.connect(self._update_buttons)
+        self._update_buttons()
+
         remove_keep_btn_layout.addWidget(self.keep_pts_btn)
         remove_keep_btn_layout.addWidget(self.remove_pts_btn)
 
@@ -148,6 +153,14 @@ class PointFilter(QWidget):
         else:
             self.points = self.viewer.layers[selected_layer]
             self.point_dropdown.setCurrentText(selected_layer)
+
+        self._update_buttons()
+
+    def _update_buttons(self):
+        """Update the button state depending on whether all conditions are met"""
+
+        self.keep_pts_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels) and self.points is not None)
+        self.remove_pts_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels) and self.points is not None)
 
     def _delete_objects(self) -> None:
         """Delete all labels selected by the points layer."""

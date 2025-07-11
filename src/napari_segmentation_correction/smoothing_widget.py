@@ -47,7 +47,10 @@ class SmoothingWidget(QWidget):
         smooth_boxlayout.addLayout(smooth_layout)
 
         self.smooth_btn.clicked.connect(self._smooth_objects)
-        self.smooth_btn.setEnabled(True)
+        self.smooth_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        self.label_manager.layer_update.connect(
+            lambda: self.smooth_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        )
 
         smoothbox.setLayout(smooth_boxlayout)
         layout = QVBoxLayout()

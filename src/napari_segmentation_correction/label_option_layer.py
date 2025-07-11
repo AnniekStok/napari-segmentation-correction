@@ -66,7 +66,7 @@ class LabelOptions(napari.layers.Labels):
             msg.setStandardButtons(QMessageBox.Ok)
             msg.exec_()
             return False
-        
+
         if event.type == "mouse_press" and event.button == 2: # copy a single slice only
             self.copy_slice_label(ndims, dims_displayed, ndims_options, ndims_label, coords, selected_label)
 

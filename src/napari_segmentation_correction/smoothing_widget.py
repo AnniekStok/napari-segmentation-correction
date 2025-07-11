@@ -135,7 +135,7 @@ class SmoothingWidget(QWidget):
                     self.label_manager.selected_layer.name
                 )
 
-            elif len(self.label_manager.selected_layer.data.shape) == 3:
+            elif self.label_manager.selected_layer.data.ndim in (2, 3):
                 self.label_manager.selected_layer = self.viewer.add_labels(
                     ndimage.median_filter(
                         self.label_manager.selected_layer.data,
@@ -149,4 +149,4 @@ class SmoothingWidget(QWidget):
                 )
 
             else:
-                print("input should be a 3D or 4D array")
+                print("input should be a 2D, 3D or 4D array")

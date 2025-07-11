@@ -88,9 +88,16 @@ class ErosionDilationWidget(QWidget):
 
         diam = self.structuring_element_diameter.value()
         iterations = self.iterations.value()
-        structuring_element = np.ones(
-            (diam, diam, diam), dtype=bool
-        )  # Define a 3x3x3 structuring element for 3D erosion
+
+        if self.label_manager.selected_layer.data.ndim == 2:
+            structuring_element = np.ones(
+                (diam, diam), dtype=bool
+            )  # Define a 3x3 structuring element for 2D erosion
+        else:
+            structuring_element = np.ones(
+                (diam, diam, diam), dtype=bool
+            )  # Define a 3x3x3 structuring element for 3D erosion
+
 
         if isinstance(self.label_manager.selected_layer.data, da.core.Array):
             if self.outputdir is None:
@@ -174,7 +181,7 @@ class ErosionDilationWidget(QWidget):
                 self.label_manager._update_labels(
                     self.label_manager.selected_layer.name
                 )
-            elif len(self.label_manager.selected_layer.data.shape) == 3:
+            elif self.label_manager.selected_layer.data.ndim in (2, 3):
                 mask = self.label_manager.selected_layer.data > 0
                 filled_mask = ndimage.binary_fill_holes(mask)
                 eroded_mask = binary_erosion(
@@ -272,7 +279,7 @@ class ErosionDilationWidget(QWidget):
                     self.label_manager.selected_layer.name
                 )
 
-            elif len(self.label_manager.selected_layer.data.shape) == 3:
+            elif self.label_manager.selected_layer.data.ndim in (2, 3):
                 expanded_labels = self.label_manager.selected_layer.data
                 for _i in range(iterations):
                     expanded_labels = expand_labels(
@@ -288,4 +295,4 @@ class ErosionDilationWidget(QWidget):
                     self.label_manager.selected_layer.name
                 )
             else:
-                print("input should be a 3D or 4D stack")
+                print("input should be a 2D, 3D or 4D label image.")

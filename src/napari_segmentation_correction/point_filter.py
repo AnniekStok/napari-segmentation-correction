@@ -159,8 +159,8 @@ class PointFilter(QWidget):
     def _update_buttons(self):
         """Update the button state depending on whether all conditions are met"""
 
-        self.keep_pts_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels) and self.points is not None)
-        self.remove_pts_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels) and self.points is not None)
+        self.keep_pts_btn.setEnabled(isinstance(self.label_manager.selected_layer, Labels) and self.points is not None)
+        self.remove_pts_btn.setEnabled(isinstance(self.label_manager.selected_layer, Labels) and self.points is not None)
 
     def _delete_objects(self) -> None:
         """Delete all labels selected by the points layer."""

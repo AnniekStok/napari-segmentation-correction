@@ -28,7 +28,7 @@ class CopyLabelWidget(QWidget):
         self.convert_to_option_layer_btn = QPushButton(
             "Convert current labels layer to label options layer"
         )
-        self.convert_to_option_layer_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels))
+        self.convert_to_option_layer_btn.setEnabled(isinstance(self.label_manager.selected_layer, Labels))
         self.convert_to_option_layer_btn.clicked.connect(
             self._convert_to_option_layer
         )
@@ -45,7 +45,7 @@ class CopyLabelWidget(QWidget):
     def _update_btn(self) -> None:
         """Make sure the button is only available when a labels layer is selected"""
 
-        if isinstance(self.label_manager._selected_layer, Labels):
+        if isinstance(self.label_manager.selected_layer, Labels):
             self.convert_to_option_layer_btn.setEnabled(True)
         else:
             self.convert_to_option_layer_btn.setEnabled(False)

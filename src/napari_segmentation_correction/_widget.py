@@ -75,18 +75,18 @@ class AnnotateLabelsND(QWidget):
         self.table_btn.clicked.connect(
             lambda: self.tab_widget.setCurrentIndex(2)
         )
-        self.table_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels))
+        self.table_btn.setEnabled(isinstance(self.label_manager.selected_layer, Labels))
         self.label_manager.layer_update.connect(
-            lambda: self.table_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+            lambda: self.table_btn.setEnabled(isinstance(self.label_manager.selected_layer, napari.layers.Labels))
         )
         self.edit_layout.addWidget(self.table_btn)
 
         ## Add save labels widget
         self.save_btn = QPushButton("Save labels")
         self.save_btn.clicked.connect(self._save_labels)
-        self.save_btn.setEnabled(isinstance(self.label_manager._selected_layer, Labels))
+        self.save_btn.setEnabled(isinstance(self.label_manager.selected_layer, Labels))
         self.label_manager.layer_update.connect(
-            lambda: self.save_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+            lambda: self.save_btn.setEnabled(isinstance(self.label_manager.selected_layer, napari.layers.Labels))
         )
 
         self.edit_layout.addWidget(self.save_btn)

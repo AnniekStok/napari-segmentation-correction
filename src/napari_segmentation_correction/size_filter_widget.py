@@ -50,9 +50,9 @@ class SizeFilterWidget(QWidget):
         filter_layout.addLayout(threshold_size_layout)
         self.delete_btn.clicked.connect(self._delete_small_objects)
 
-        self.delete_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+        self.delete_btn.setEnabled(isinstance(self.label_manager.selected_layer, napari.layers.Labels))
         self.label_manager.layer_update.connect(
-            lambda: self.delete_btn.setEnabled(isinstance(self.label_manager._selected_layer, napari.layers.Labels))
+            lambda: self.delete_btn.setEnabled(isinstance(self.label_manager.selected_layer, napari.layers.Labels))
         )
 
         filterbox.setLayout(filter_layout)

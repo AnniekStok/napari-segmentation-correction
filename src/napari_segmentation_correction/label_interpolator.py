@@ -67,8 +67,8 @@ class InterpolationWidget(QWidget):
 
         run_btn = QPushButton("Run interpolation along first axis")
         run_btn.clicked.connect(self._interpolate)
-        run_btn.setEnabled(self.label_manager._selected_layer is not None)
-        self.label_manager.layer_update.connect(lambda: run_btn.setEnabled(self.label_manager._selected_layer is not None))
+        run_btn.setEnabled(self.label_manager.selected_layer is not None)
+        self.label_manager.layer_update.connect(lambda: run_btn.setEnabled(self.label_manager.selected_layer is not None))
         interpolator_box_layout.addWidget(run_btn)
 
         interpolator_box.setLayout(interpolator_box_layout)

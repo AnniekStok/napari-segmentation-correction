@@ -69,5 +69,8 @@ class LayerDropdown(QComboBox):
         """Emit a signal holding the currently selected layer"""
 
         selected_layer_name = self.currentText()
-        self.selected_layer = self.viewer.layers.get(selected_layer_name, None)
+        if selected_layer_name in self.viewer.layers:
+            self.selected_layer = self.viewer.layers[selected_layer_name]
+        else:
+            self.selected_layer = None
         self.layer_changed.emit(selected_layer_name)

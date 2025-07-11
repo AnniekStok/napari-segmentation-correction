@@ -66,11 +66,22 @@ class SelectDeleteMask(QWidget):
         self.delete_btn.clicked.connect(self.delete_labels)
         select_delete_box_layout.addWidget(self.delete_btn)
 
+        self.image1_dropdown.layer_changed.connect(self._update_buttons)
+        self.mask_dropdown.layer_changed.connect(self._update_buttons)
+        self._update_buttons()        
+
         select_delete_box.setLayout(select_delete_box_layout)
         main_layout = QVBoxLayout()
         main_layout.addWidget(select_delete_box)
         self.setLayout(main_layout)
 
+    def _update_buttons(self) -> None:
+        """Update button state according to whether image layers are present"""
+
+        active = self.image1_dropdown.selected_layer is not None and self.mask_dropdown.selected_layer is not None
+        self.select_btn.setEnabled(active)
+        self.delete_btn.setEnabled(active)
+        
     def _update_image1(self, selected_layer: str) -> None:
         """Update the layer that is set to be the 'source labels' layer for copying labels from."""
 

@@ -25,6 +25,10 @@ class PlotWidget(QWidget):
         self.label_manager = label_manager
         self.label_manager.layer_update.connect(self._layer_update)
 
+        # instruction label 
+        self.label = QLabel("<i>Click on 'Show Table' in the Editing tab to compute features on the active label layer</i>")
+        self.label.setWordWrap(True)
+        
         # Main plot.
         self.fig = plt.figure(constrained_layout=True)
         self.plot_canvas = FigureCanvas(self.fig)
@@ -75,6 +79,7 @@ class PlotWidget(QWidget):
 
         # Create and apply a horizontal layout for the dropdown widget, toolbar and canvas.
         plotting_layout = QVBoxLayout()
+        plotting_layout.addWidget(self.label)
         plotting_layout.addWidget(dropdown_widget)
         plotting_layout.addWidget(self.toolbar)
         plotting_layout.addWidget(self.plot_canvas)
@@ -86,17 +91,21 @@ class PlotWidget(QWidget):
         if self.label_manager.selected_layer is not None:
             self.label_manager.selected_layer.events.show_selected_label.connect(self._update_plot)
             self.label_manager.selected_layer.events.selected_label.connect(self._update_plot)
-            self.label_manager.selected_layer.events.features.connect(self._update_dropdown)
+            self.label_manager.selected_layer.events.features.connect(self._update_dropdown)  
+        
+        self._update_dropdown()
+        self._update_plot()  
 
     def _update_dropdown(self) -> None:
         """Update the dropdowns with the column headers"""
 
-        # temporarily disconnect listening to updates in the comboboxes
-        self.x_combo.currentIndexChanged.disconnect(self._update_plot)
-        self.y_combo.currentIndexChanged.disconnect(self._update_plot)
-        self.group_combo.currentIndexChanged.disconnect(self._update_plot)
+        if self.label_manager.selected_layer is not None and len(self.label_manager.selected_layer.features) > 0:
+            
+            # temporarily disconnect listening to updates in the comboboxes
+            self.x_combo.currentIndexChanged.disconnect(self._update_plot)
+            self.y_combo.currentIndexChanged.disconnect(self._update_plot)
+            self.group_combo.currentIndexChanged.disconnect(self._update_plot)
 
-        if len(self.label_manager.selected_layer.features) > 0:
             prev_index = self.x_combo.currentIndex() if self.x_combo.count() > 0 else 0
             self.x_combo.clear()
             self.x_combo.addItems(
@@ -118,30 +127,36 @@ class PlotWidget(QWidget):
             )
             self.group_combo.setCurrentIndex(prev_index)
 
-        # reconnect to updates in the comboboxes
-        self.x_combo.currentIndexChanged.connect(self._update_plot)
-        self.y_combo.currentIndexChanged.connect(self._update_plot)
-        self.group_combo.currentIndexChanged.connect(self._update_plot)
+            # reconnect to updates in the comboboxes
+            self.x_combo.currentIndexChanged.connect(self._update_plot)
+            self.y_combo.currentIndexChanged.connect(self._update_plot)
+            self.group_combo.currentIndexChanged.connect(self._update_plot)
+
         self._update_plot()
 
     def _update_plot(self) -> None:
         """Update the plot by plotting the features selected by the user."""
 
-        if len(self.label_manager.selected_layer.features) > 0:
+        if self.label_manager.selected_layer is not None and len(self.label_manager.selected_layer.features) == 0:
+            self.label.setVisible(True)
+        else:
+            self.label.setVisible(False)
 
-            x_axis_property = self.x_combo.currentText()
-            y_axis_property = self.y_combo.currentText()
-            group = self.group_combo.currentText()
+        x_axis_property = self.x_combo.currentText()
+        y_axis_property = self.y_combo.currentText()
+        group = self.group_combo.currentText()
+
+        # Clear data points, and reset the axis scaling and labels.
+        for artist in self.ax.lines + self.ax.collections:
+            artist.remove()
+        self.ax.set_xlabel(x_axis_property)
+        self.ax.set_ylabel(y_axis_property)
+        self.ax.relim()  # Recalculate limits for the current data
+        self.ax.autoscale_view()  # Update the view to include the new limits
+
+        if self.label_manager.selected_layer is not None and len(self.label_manager.selected_layer.features) > 0:
 
             if x_axis_property != '' and y_axis_property != '' and group != '':
-
-                # Clear data points, and reset the axis scaling and labels.
-                for artist in self.ax.lines + self.ax.collections:
-                    artist.remove()
-                self.ax.set_xlabel(x_axis_property)
-                self.ax.set_ylabel(y_axis_property)
-                self.ax.relim()  # Recalculate limits for the current data
-                self.ax.autoscale_view()  # Update the view to include the new limits
 
                 if group == "label":
                     if self.label_manager.selected_layer.show_selected_label:
@@ -192,5 +207,5 @@ class PlotWidget(QWidget):
                         s=10,
                     )
 
-                self.plot_canvas.draw()
+        self.plot_canvas.draw()
 

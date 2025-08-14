@@ -59,4 +59,5 @@ class CopyLabelWidget(QWidget):
             label_manager=self.label_manager,
         )
         self.viewer.layers.append(self.option_labels)
+        self.option_labels.contour = 1
 

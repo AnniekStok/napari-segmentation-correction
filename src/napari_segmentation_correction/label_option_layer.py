@@ -9,6 +9,7 @@ from qtpy.QtWidgets import (
 )
 
 from .layer_manager import LayerManager
+from napari.layers import Labels
 
 
 class LabelOptions(napari.layers.Labels):
@@ -31,7 +32,6 @@ class LabelOptions(napari.layers.Labels):
             blending="translucent_no_depth",
         )
 
-        self.contour = 1
         self.viewer = viewer
         self.label_manager = label_manager
 
@@ -243,3 +243,20 @@ class LabelOptions(napari.layers.Labels):
         sliced_data[mask] = new_selected_label
         target_stack[tuple(label_slices[1:])] = sliced_data
         self.label_manager.selected_layer.data[coords_clipped[0]] = target_stack
+
+def sync_click(orig_layer: LabelOptions, copied_layer: Labels, event: Event) -> None:
+    """Forward the click event to the LabelOptions layer"""
+
+    if event.type == "mouse_press":
+        selected_label = copied_layer.get_value(
+            event.position,
+            view_direction=event.view_direction,
+            dims_displayed=event.dims_displayed,
+            world=True,
+        )
+
+        coords = orig_layer.world_to_data(event.position)
+        coords = [int(c) for c in coords]
+
+        # Process the click event on the LabelOptions layer
+        orig_layer.copy_label(event, coords, selected_label)

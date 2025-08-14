@@ -31,7 +31,7 @@ To install latest development version :
 ## Usage
 This plugin serves as a toolbox aiming to help with correcting segmentation results.
 Functionalities:
-- Orthogonal views for 3D data based on the [MultipleViewerWidget](https://github.com/napari/napari/blob/e490e5535438ab338a23b17905a1952f15a6d27a/examples/multiple_viewer_widget.py) and 3D plane and clipping plane sliders.
+- Orthogonal views for 3D data based on the [MultipleViewerWidget](https://github.com/napari/napari/blob/e490e5535438ab338a23b17905a1952f15a6d27a/examples/multiple_viewer_widget.py).
 - explore label properties (scikit-image regionprops) in a table widget (based on [napari-skimage-regionprops](https://github.com/haesleinhuepf/napari-skimage-regionprops)) and a Matplotlib plot.
 - select/delete labels using a points layer
 - copy labels from a 2-5 dimensional array with multiple segmentation options to your current 2-4 dimensional label layer.
@@ -43,15 +43,14 @@ Functionalities:
 - image calculator for mathematical operations on two images
 - selecting/deleting labels that overlap with a binary mask
 
-### 3D viewing
-![](instructions/3d_viewing.gif)
-
 ### Copy labels between different labels layers
-![](instructions/copy_labels.gif)
-To copy 2D or 3D labels from one layer to another, follow these steps: 
-1) Select the labels layer from which you want to copy, and click 'Convert current label layer to label options layer' 
+![](instructions/label_options.gif)
+
+2D or 3D labels can be copied from a source layer to a target layer. The data in the source layer should have the same shape as the target layer, but can optionally have one extra dimension, so it is possible to stack multiple segmentation solutions as channels, and copy labels from different channels to the target layer. To copy 2D or 3D labels from one layer to another, follow these steps: 
+1) If needed, first stack multiple segmentation solutions along a new axis (as if they are channels). Select the labels layer from which you want to copy, and click 'Convert current label layer to label options layer'. A new layer with outlined labels will be created.
 2) Make sure the labels layer to which you want to copy is your new current label layer (clicking on it will activate it, or select it from the dropdown at the top of the Editing tab). 
 3) With the layer named 'labels options' selected, Shift+Click on the main view or any of the orthogonal views to copy the label you clicked on to the target layer. Alternatively, right-mouse click will copy only the 2D label from the current view (yx for the main view, xz and yz for the orthogonal views) to the corresponding position in target layer.
+Note: make sure that your target layer does not accidentally have a channel dimension as well. This may happen if you first created the label options layer with multiple channels, and then created a new empty labels layer, because Napari will automatically assign the same number of dimensions as are currently in the viewer.
 
 ### Select / delete labels that overlap with a binary mask
 ![](instructions/select_labels_by_mask.png)

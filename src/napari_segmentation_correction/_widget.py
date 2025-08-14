@@ -33,8 +33,8 @@ from .select_delete_widget import SelectDeleteMask
 from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
-from .view3D import View3D
-
+from .label_option_layer import LabelOptions, sync_click
+from napari_orthogonal_views.ortho_view_manager import _get_manager
 
 class AnnotateLabelsND(QWidget):
     """Widget for manual correction of label data, for example to prepare ground truth data for training a segmentation model"""
@@ -42,7 +42,6 @@ class AnnotateLabelsND(QWidget):
     def __init__(self, viewer: "napari.viewer.Viewer") -> None:
         super().__init__()
         self.viewer = viewer
-
         self.source_labels = None
         self.target_labels = None
         self.points = None
@@ -51,6 +50,15 @@ class AnnotateLabelsND(QWidget):
         self.edit_layout = QVBoxLayout()
         self.tab_widget = QTabWidget(self)
         self.option_labels = None
+
+        ### activate orthogonal views and register custom function
+        def label_options_click_hook(orig_layer, copied_layer):
+            copied_layer.mouse_drag_callbacks.append(
+                lambda layer, event: sync_click(orig_layer, layer, event)
+            )
+        
+        orth_view_manager = _get_manager(self.viewer)
+        orth_view_manager.register_layer_hook(LabelOptions, label_options_click_hook)
 
         ### connect event to switch ndisplay because the otherwise the orthogonal views might be frozen (bug)
         self.viewer.dims.events.ndisplay.connect(self.update_3D_tab)
@@ -137,10 +145,6 @@ class AnnotateLabelsND(QWidget):
         # Add widget for interpolating masks
         interpolation_widget = InterpolationWidget(self.viewer, self.label_manager)
         self.edit_layout.addWidget(interpolation_widget)
-
-        ## add 3d viewing widget
-        self.view3d_widget = View3D(self.viewer)
-        self.tab_widget.addTab(self.view3d_widget, "3D Viewing")
 
         ## add combined editing widgets widgets
         self.edit_widgets = QWidget()

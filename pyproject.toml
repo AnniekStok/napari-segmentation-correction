@@ -2,19 +2,11 @@
 requires = ["setuptools>=42.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-
-
-[tool.black]
-line-length = 79
-target-version = ['py38', 'py39', 'py310']
-
-
 [tool.ruff]
 line-length = 88
 target-version = "py310"
 fix = true
 
-[tool.ruff.lint]
 select = [
     "E", "F", "W", #flake8
     "UP", # pyupgrade
@@ -35,8 +27,7 @@ ignore = [
     "E501", # line too long
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"scripts/*.py" = ["F"]
+per-file-ignores = { "scripts/*.py" = ["F"] }
 
 # https://docs.astral.sh/ruff/formatter/
 [tool.ruff.format]

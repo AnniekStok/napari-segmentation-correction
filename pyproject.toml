@@ -7,7 +7,7 @@ line-length = 88
 target-version = "py310"
 fix = true
 
-select = [
+lint.select = [
     "E", "F", "W", #flake8
     "UP", # pyupgrade
     "I", # isort
@@ -21,13 +21,13 @@ select = [
     "SIM", # flake8-simplify
 ]
 
-ignore = [
+lint.ignore = [
     "UP006", "UP007", # type annotation. As using magicgui require runtime type annotation then we disable this.
     "ISC001", # implicit string concatenation
     "E501", # line too long
 ]
 
-per-file-ignores = { "scripts/*.py" = ["F"] }
+lint.per-file-ignores = { "scripts/*.py" = ["F"] }
 
 # https://docs.astral.sh/ruff/formatter/
 [tool.ruff.format]

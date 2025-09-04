@@ -1,9 +1,10 @@
-
 import dask.array as da
 import napari
 import pandas as pd
+from napari.layers import Labels
 from qtpy.QtWidgets import (
-    QGroupBox,
+    QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -26,30 +27,34 @@ class RegionPropsWidget(QWidget):
         self.label_manager = label_manager
         self.table = None
 
-        regionprops_box = QGroupBox("Region properties")
+        self.table_btn = QPushButton("Compute properties")
+        self.table_btn.clicked.connect(self._create_summary_table)
+        self.table_btn.setEnabled(isinstance(self.label_manager.selected_layer, Labels))
+        self.label_manager.layer_update.connect(
+            lambda: self.table_btn.setEnabled(
+                isinstance(self.label_manager.selected_layer, napari.layers.Labels)
+            )
+        )
         self.regionprops_layout = QVBoxLayout()
+        self.regionprops_layout.addWidget(self.table_btn)
         self.plotwidget = PlotWidget(self.label_manager)
         self.regionprops_layout.addWidget(self.plotwidget)
-
-        regionprops_box.setLayout(self.regionprops_layout)
-
-        layout = QVBoxLayout()
-        layout.addWidget(regionprops_box)
-        self.setLayout(layout)
+        self.regionprops_layout.addStretch()
+        self.setLayout(self.regionprops_layout)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def _create_summary_table(self) -> None:
         """Create table displaying the sizes of the different labels in the current stack"""
 
         if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-
             props_list = []
             for tp in range(self.label_manager.selected_layer.data.shape[0]):
                 props = measure.regionprops_table(
                     self.label_manager.selected_layer.data[tp].compute(),
                     properties=["label", "num_pixels", "area", "centroid"],
-                    spacing=self.label_manager.selected_layer.scale[1:]
+                    spacing=self.label_manager.selected_layer.scale[1:],
                 )
-                props['time_point'] = tp
+                props["time_point"] = tp
                 props_list.append(pd.DataFrame.from_dict(props))
 
             props = pd.concat(props_list)
@@ -64,9 +69,9 @@ class RegionPropsWidget(QWidget):
                     props = measure.regionprops_table(
                         self.label_manager.selected_layer.data[tp],
                         properties=["label", "num_pixels", "area", "centroid"],
-                        spacing=self.label_manager.selected_layer.scale[1:]
+                        spacing=self.label_manager.selected_layer.scale[1:],
                     )
-                    props['time_point'] = tp
+                    props["time_point"] = tp
                     props_list.append(pd.DataFrame.from_dict(props))
 
                 props = pd.concat(props_list)
@@ -78,10 +83,12 @@ class RegionPropsWidget(QWidget):
                 props = measure.regionprops_table(
                     self.label_manager.selected_layer.data,
                     properties=["label", "num_pixels", "area", "centroid"],
-                    spacing=self.label_manager.selected_layer.scale
+                    spacing=self.label_manager.selected_layer.scale,
                 )
                 if hasattr(self.label_manager.selected_layer, "properties"):
-                    self.label_manager.selected_layer.properties = pd.DataFrame.from_dict(props)
+                    self.label_manager.selected_layer.properties = (
+                        pd.DataFrame.from_dict(props)
+                    )
             else:
                 print("input should be a 2D, 3D or 4D array")
                 self.table = None
@@ -89,7 +96,6 @@ class RegionPropsWidget(QWidget):
                     self.table.hide()
                 return
 
-        print('properties are of type', type(self.label_manager.selected_layer.properties))
         # add the napari-skimage-regionprops inspired table to the viewer
         if self.table is not None:
             self.table.hide()
@@ -101,4 +107,3 @@ class RegionPropsWidget(QWidget):
             self.table._set_label_colors_to_rows()
             self.table.setMinimumWidth(500)
             self.regionprops_layout.addWidget(self.table)
-

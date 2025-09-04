@@ -10,15 +10,15 @@ class ColoredTableWidget(TableWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.ascending = (
-            False  # for choosing whether to sort ascending or descending
-        )
+        self.ascending = False  # for choosing whether to sort ascending or descending
 
         # Reconnect the clicked signal to your custom method.
         self._view.clicked.connect(self._clicked_table)
 
         # Connect to single click in the header to sort the table.
         self._view.horizontalHeader().sectionClicked.connect(self._sort_table)
+
+        self.setMinimumHeight(300)
 
     def _set_label_colors_to_rows(self) -> None:
         """Apply the colors of the napari label image to the table"""
@@ -44,13 +44,13 @@ class ColoredTableWidget(TableWidget):
         current_step = self._viewer.dims.current_step
         z = int(self._table["centroid-0"][row])
         if len(current_step) == 4:
-            if 'time_point' in self._table:
+            if "time_point" in self._table:
                 t = int(self._table["time_point"][row])
                 new_step = (t, z, current_step[2], current_step[3])
             else:
                 new_step = (z, current_step[1], current_step[2])
         elif len(current_step) == 3:
-            if 'time_point' in self._table:
+            if "time_point" in self._table:
                 t = int(self._table["time_point"][row])
                 new_step = (t, current_step[1], current_step[2])
             else:

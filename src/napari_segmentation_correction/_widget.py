@@ -3,7 +3,6 @@ Napari plugin widget for editing N-dimensional label data
 """
 
 import napari
-from napari.layers import Labels
 from napari_orthogonal_views.ortho_view_manager import _get_manager
 from qtpy.QtWidgets import (
     QFileDialog,
@@ -69,19 +68,6 @@ class AnnotateLabelsND(QWidget):
         ### create the dropdown for selecting label images
         self.label_manager = LayerManager(self.viewer)
         self.edit_layout.addWidget(self.label_manager)
-
-        ### Add widget for adding overview table
-        self.table_btn = QPushButton("Show table")
-        self.regionprops_widget = RegionPropsWidget(self.viewer, self.label_manager)
-        self.table_btn.clicked.connect(self.regionprops_widget._create_summary_table)
-        self.table_btn.clicked.connect(lambda: self.tab_widget.setCurrentIndex(2))
-        self.table_btn.setEnabled(isinstance(self.label_manager.selected_layer, Labels))
-        self.label_manager.layer_update.connect(
-            lambda: self.table_btn.setEnabled(
-                isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-            )
-        )
-        self.edit_layout.addWidget(self.table_btn)
 
         ## Add button to clear all layers
         self.clear_btn = QPushButton("Clear all layers")
@@ -149,8 +135,12 @@ class AnnotateLabelsND(QWidget):
         self.tab_widget.addTab(scroll_area, "Editing")
         self.tab_widget.setCurrentIndex(1)
 
-        ## add widget for viewing data
-        self.tab_widget.addTab(self.regionprops_widget, "Region properties")
+        ### Add widget for adding overview table
+        self.regionprops_widget = RegionPropsWidget(self.viewer, self.label_manager)
+        props_scroll_area = QScrollArea()
+        props_scroll_area.setWidget(self.regionprops_widget)
+        props_scroll_area.setWidgetResizable(True)
+        self.tab_widget.addTab(props_scroll_area, "Region properties")
 
         # Add the tab widget to the main layout
         self.main_layout = QVBoxLayout()

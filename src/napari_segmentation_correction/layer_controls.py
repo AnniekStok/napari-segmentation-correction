@@ -1,6 +1,5 @@
 import napari
 from qtpy.QtWidgets import (
-    QPushButton,
     QVBoxLayout,
     QWidget,
 )
@@ -26,19 +25,9 @@ class LayerControlsWidget(QWidget):
         ### create the dropdown for selecting label images
         layout.addWidget(self.label_manager)
 
-        ### Add button to clear all layers
-        self.clear_btn = QPushButton("Clear all layers")
-        self.clear_btn.setEnabled(len(self.viewer.layers) > 0)
-        self.viewer.layers.events.removed.connect(
-            lambda: self.clear_btn.setEnabled(len(self.viewer.layers) > 0)
-        )
-        self.viewer.layers.events.inserted.connect(
-            lambda: self.clear_btn.setEnabled(len(self.viewer.layers) > 0)
-        )
-
         ### Add widget for copy-pasting labels from one layer to another
-        copy_label_widget = CopyLabelWidget(self.viewer, self.label_manager)
-        layout.addWidget(copy_label_widget)
+        self.copy_label_widget = CopyLabelWidget(self.viewer)
+        layout.addWidget(self.copy_label_widget)
 
         ### Add widget to save labels
         save_labels = SaveLabelsWidget(self.viewer, self.label_manager)

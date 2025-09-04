@@ -8,17 +8,18 @@ class LayerDropdown(QComboBox):
 
     layer_changed = pyqtSignal(str)  # signal to emit the selected layer name
 
-    def __init__(self, viewer: napari.Viewer, layer_type: tuple):
+    def __init__(
+        self, viewer: napari.Viewer, layer_type: tuple, allow_none: bool = False
+    ):
         super().__init__()
         self.viewer = viewer
         self.layer_type = layer_type
+        self.allow_none = allow_none
         self.selected_layer = None
         self.viewer.layers.events.inserted.connect(self._on_insert)
         self.viewer.layers.events.changed.connect(self._update_dropdown)
         self.viewer.layers.events.removed.connect(self._update_dropdown)
-        self.viewer.layers.selection.events.changed.connect(
-            self._on_selection_changed
-        )
+        self.viewer.layers.selection.events.changed.connect(self._on_selection_changed)
         self.currentTextChanged.connect(self._emit_layer_changed)
         self._update_dropdown()
 
@@ -50,12 +51,13 @@ class LayerDropdown(QComboBox):
         selected_layer = self.currentText()
         self.clear()
         layers = [
-            layer
-            for layer in self.viewer.layers
-            if isinstance(layer, self.layer_type)
-            and layer.name != "label options"
+            layer for layer in self.viewer.layers if isinstance(layer, self.layer_type)
         ]
         items = []
+        if self.allow_none:
+            self.addItem("No selection")
+            items.append("No selection")
+
         for layer in layers:
             self.addItem(layer.name)
             items.append(layer.name)
@@ -69,8 +71,12 @@ class LayerDropdown(QComboBox):
         """Emit a signal holding the currently selected layer"""
 
         selected_layer_name = self.currentText()
-        if selected_layer_name in self.viewer.layers:
+        if (
+            selected_layer_name != "No selection"
+            and selected_layer_name in self.viewer.layers
+        ):
             self.selected_layer = self.viewer.layers[selected_layer_name]
         else:
             self.selected_layer = None
+            selected_layer_name = ""
         self.layer_changed.emit(selected_layer_name)

@@ -3,6 +3,7 @@ Napari plugin widget for editing N-dimensional label data
 """
 
 import napari
+from napari.layers import Labels
 from napari_orthogonal_views.ortho_view_manager import _get_manager
 from qtpy.QtWidgets import (
     QScrollArea,
@@ -15,7 +16,6 @@ from .connected_components import ConnectedComponents
 from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
 from .label_interpolator import InterpolationWidget
-from .label_option_layer import LabelOptions, sync_click
 from .layer_controls import LayerControlsWidget
 from .layer_manager import LayerManager
 from .point_filter import PointFilter
@@ -40,20 +40,22 @@ class AnnotateLabelsND(QWidget):
         self.tab_widget = QTabWidget(self)
         self.option_labels = None
 
-        ### activate orthogonal views and register custom function
-        def label_options_click_hook(orig_layer, copied_layer):
-            copied_layer.mouse_drag_callbacks.append(
-                lambda layer, event: sync_click(orig_layer, layer, event)
-            )
-
-        orth_view_manager = _get_manager(self.viewer)
-        orth_view_manager.register_layer_hook(LabelOptions, label_options_click_hook)
-
         ### Add label manager
         self.label_manager = LayerManager(self.viewer)
 
         ### Add layer controls widget
         self.layer_controls = LayerControlsWidget(self.viewer, self.label_manager)
+
+        ### activate orthogonal views and register custom function
+        def label_options_click_hook(orig_layer, copied_layer):
+            copied_layer.mouse_drag_callbacks.append(
+                lambda layer, event: self.layer_controls.copy_label_widget.sync_click(
+                    orig_layer, layer, event
+                )
+            )
+
+        orth_view_manager = _get_manager(self.viewer)
+        orth_view_manager.register_layer_hook(Labels, label_options_click_hook)
 
         ### Add widget for filtering by points layer
         point_filter = PointFilter(self.viewer, self.label_manager)

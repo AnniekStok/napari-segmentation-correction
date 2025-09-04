@@ -2,18 +2,14 @@
 Napari plugin widget for editing N-dimensional label data
 """
 
-import os
-import shutil
-
-import dask.array as da
 import napari
-import numpy as np
-import tifffile
 from napari.layers import Labels
+from napari_orthogonal_views.ortho_view_manager import _get_manager
 from qtpy.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QTabWidget,
@@ -26,15 +22,16 @@ from .copy_label_widget import CopyLabelWidget
 from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
 from .label_interpolator import InterpolationWidget
+from .label_option_layer import LabelOptions, sync_click
 from .layer_manager import LayerManager
 from .point_filter import PointFilter
 from .regionprops_widget import RegionPropsWidget
+from .save_labels_widget import SaveLabelsWidget
 from .select_delete_widget import SelectDeleteMask
 from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
-from .label_option_layer import LabelOptions, sync_click
-from napari_orthogonal_views.ortho_view_manager import _get_manager
+
 
 class AnnotateLabelsND(QWidget):
     """Widget for manual correction of label data, for example to prepare ground truth data for training a segmentation model"""
@@ -56,12 +53,9 @@ class AnnotateLabelsND(QWidget):
             copied_layer.mouse_drag_callbacks.append(
                 lambda layer, event: sync_click(orig_layer, layer, event)
             )
-        
+
         orth_view_manager = _get_manager(self.viewer)
         orth_view_manager.register_layer_hook(LabelOptions, label_options_click_hook)
-
-        ### connect event to switch ndisplay because the otherwise the orthogonal views might be frozen (bug)
-        self.viewer.dims.events.ndisplay.connect(self.update_3D_tab)
 
         ### specify output directory
         outputbox_layout = QHBoxLayout()
@@ -80,29 +74,31 @@ class AnnotateLabelsND(QWidget):
         self.table_btn = QPushButton("Show table")
         self.regionprops_widget = RegionPropsWidget(self.viewer, self.label_manager)
         self.table_btn.clicked.connect(self.regionprops_widget._create_summary_table)
-        self.table_btn.clicked.connect(
-            lambda: self.tab_widget.setCurrentIndex(2)
-        )
+        self.table_btn.clicked.connect(lambda: self.tab_widget.setCurrentIndex(2))
         self.table_btn.setEnabled(isinstance(self.label_manager.selected_layer, Labels))
         self.label_manager.layer_update.connect(
-            lambda: self.table_btn.setEnabled(isinstance(self.label_manager.selected_layer, napari.layers.Labels))
+            lambda: self.table_btn.setEnabled(
+                isinstance(self.label_manager.selected_layer, napari.layers.Labels)
+            )
         )
         self.edit_layout.addWidget(self.table_btn)
 
-        ## Add save labels widget
-        self.save_btn = QPushButton("Save labels")
-        self.save_btn.clicked.connect(self._save_labels)
-        self.save_btn.setEnabled(isinstance(self.label_manager.selected_layer, Labels))
-        self.label_manager.layer_update.connect(
-            lambda: self.save_btn.setEnabled(isinstance(self.label_manager.selected_layer, napari.layers.Labels))
-        )
-
-        self.edit_layout.addWidget(self.save_btn)
-
         ## Add button to clear all layers
         self.clear_btn = QPushButton("Clear all layers")
+        self.clear_btn.setEnabled(len(self.viewer.layers) > 0)
+        self.viewer.layers.events.removed.connect(
+            lambda: self.clear_btn.setEnabled(len(self.viewer.layers) > 0)
+        )
+        self.viewer.layers.events.inserted.connect(
+            lambda: self.clear_btn.setEnabled(len(self.viewer.layers) > 0)
+        )
+
         self.clear_btn.clicked.connect(self._clear_layers)
         self.edit_layout.addWidget(self.clear_btn)
+
+        ### Add widget to save labels
+        save_labels = SaveLabelsWidget(self.viewer, self.label_manager)
+        self.edit_layout.addWidget(save_labels)
 
         ### Add widget for filtering by points layer
         point_filter = PointFilter(self.viewer, self.label_manager)
@@ -125,9 +121,7 @@ class AnnotateLabelsND(QWidget):
         self.edit_layout.addWidget(smooth_widget)
 
         ### Add widget for eroding/dilating labels
-        erode_dilate_widget = ErosionDilationWidget(
-            self.viewer, self.label_manager
-        )
+        erode_dilate_widget = ErosionDilationWidget(self.viewer, self.label_manager)
         self.edit_layout.addWidget(erode_dilate_widget)
 
         ### Threshold image
@@ -171,88 +165,18 @@ class AnnotateLabelsND(QWidget):
             self.output_path.setText(path)
             self.outputdir = str(self.output_path.text())
 
-    def update_3D_tab(self):
-        """Silly workaround to ensure that the orthongal views are updated when switching ndims displayed"""
-        if self.tab_widget.currentIndex() == 0:
-            self.tab_widget.setCurrentIndex(1)
-            self.tab_widget.setCurrentIndex(0)
-
-    def _save_labels(self) -> None:
-        """Save the currently active labels layer. If it consists of multiple timepoints, they are written to multiple 3D stacks."""
-
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-
-            if self.outputdir is None:
-                self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
-            outputdir = os.path.join(
-                self.outputdir,
-                (self.label_manager.selected_layer.name + "_finalresult"),
-            )
-            if os.path.exists(outputdir):
-                shutil.rmtree(outputdir)
-            os.mkdir(outputdir)
-
-            for i in range(
-                self.label_manager.selected_layer.data.shape[0]
-            ):  # Loop over the first dimension
-                current_stack = self.label_manager.selected_layer.data[
-                    i
-                ].compute()  # Compute the current stack
-                tifffile.imwrite(
-                    os.path.join(
-                        outputdir,
-                        (
-                            self.label_manager.selected_layer.name
-                            + "_TP"
-                            + str(i).zfill(4)
-                            + ".tif"
-                        ),
-                    ),
-                    np.array(current_stack),
-                )
-
-        elif len(self.label_manager.selected_layer.data.shape) == 4:
-            filename, _ = QFileDialog.getSaveFileName(
-                caption="Save Labels",
-                directory="",
-                filter="TIFF files (*.tif *.tiff)",
-            )
-            for i in range(self.label_manager.selected_layer.data.shape[0]):
-                labels_data = self.label_manager.selected_layer.data[i].astype(
-                    np.uint16
-                )
-                tifffile.imwrite(
-                    (
-                        filename.split(".tif")[0]
-                        + "_TP"
-                        + str(i).zfill(4)
-                        + ".tif"
-                    ),
-                    labels_data,
-                )
-
-        elif len(self.label_manager.selected_layer.data.shape) == 3:
-            filename, _ = QFileDialog.getSaveFileName(
-                caption="Save Labels",
-                directory="",
-                filter="TIFF files (*.tif *.tiff)",
-            )
-
-            if filename:
-                labels_data = self.label_manager.selected_layer.data.astype(
-                    np.uint16
-                )
-                tifffile.imwrite(filename, labels_data)
-
-        else:
-            print("labels should be a 3D or 4D array")
-
     def _clear_layers(self) -> None:
         """Clear all the layers in the viewer"""
 
-        if self.regionprops_widget.table is not None:
-            self.regionprops_widget.table.hide()
-            self.regionprops_widget.table = None
-            self.edit_layout.update()
+        msg = QMessageBox()
+        msg.setWindowTitle("Remove all layers?")
+        msg.setText("Are you sure you want to remove all layers from the viewer?")
+        msg.setIcon(QMessageBox.Question)
+        msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+        if msg.exec_() == QMessageBox.Ok:
+            if self.regionprops_widget.table is not None:
+                self.regionprops_widget.table.hide()
+                self.regionprops_widget.table = None
+                self.edit_layout.update()
 
-        self.viewer.layers.clear()
+            self.viewer.layers.clear()

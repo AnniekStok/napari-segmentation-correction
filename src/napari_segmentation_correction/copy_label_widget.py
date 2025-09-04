@@ -6,16 +6,50 @@ import numpy as np
 from napari.layers import Labels
 from napari.utils.events import Event
 from qtpy.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QMessageBox,
+    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
 
 from .layer_dropdown import LayerDropdown
+
+
+class DimsRadioButtons(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+
+        label = QLabel("Copy dimensions:")
+
+        button_group = QButtonGroup()
+        self.slice = QRadioButton("Slice (last 2 dims)")
+        self.slice.setEnabled(False)
+        self.slice.setChecked(False)
+        self.volume = QRadioButton("Volume (last 3 dims)")
+        self.volume.setChecked(False)
+        self.volume.setEnabled(False)
+        self.series = QRadioButton("Series (last 4 dims)")
+        self.series.setChecked(False)
+        self.series.setEnabled(False)
+
+        button_group.addButton(self.slice)
+        button_group.addButton(self.volume)
+        button_group.addButton(self.series)
+
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.slice)
+        button_layout.addWidget(self.volume)
+        button_layout.addWidget(self.series)
+
+        layout = QVBoxLayout()
+        layout.addWidget(label)
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
 
 
 class CopyLabelWidget(QWidget):
@@ -27,13 +61,14 @@ class CopyLabelWidget(QWidget):
         self.viewer = viewer
 
         self.source_layer = None
+        self.target_layer = None
         self._source_callback = None
 
         copy_labels_box = QGroupBox("Copy-paste labels")
         copy_labels_layout = QVBoxLayout()
 
         label = QLabel(
-            "Use shift + click on the source layer to copy labels to the target layer. Use right mouse click to copy only a single slice of a label to the target layer."
+            "Use shift + click on the source layer to copy labels to the target layer."
         )
         label.setWordWrap(True)
         font = label.font()
@@ -68,6 +103,9 @@ class CopyLabelWidget(QWidget):
 
         copy_labels_layout.addLayout(image_layout)
 
+        self.dims_widget = DimsRadioButtons()
+        copy_labels_layout.addWidget(self.dims_widget)
+
         copy_labels_box.setLayout(copy_labels_layout)
 
         layout = QVBoxLayout()
@@ -93,6 +131,38 @@ class CopyLabelWidget(QWidget):
             self._source_callback = self._make_copy_label_callback(self.source_layer)
             self.source_layer.mouse_drag_callbacks.append(self._source_callback)
 
+        self.update_radiobuttons()
+
+    def update_radiobuttons(self) -> None:
+        """Update the state of the dimension checkboxes based on the source and target layers."""
+
+        # All buttons off
+        self.dims_widget.slice.setEnabled(False)
+        self.dims_widget.slice.setChecked(False)
+        self.dims_widget.volume.setEnabled(False)
+        self.dims_widget.volume.setChecked(False)
+        self.dims_widget.series.setEnabled(False)
+        self.dims_widget.series.setChecked(False)
+
+        if self.source_layer is not None and self.target_layer is not None:
+            # Set the highest possible option based on the number of dimensions of the source and target layers
+            source_dims = self.source_layer.data.ndim
+            target_dims = self.target_layer.data.ndim
+            dims = min(source_dims, target_dims)
+
+            if dims >= 4:
+                self.dims_widget.series.setEnabled(True)
+                self.dims_widget.volume.setEnabled(True)
+                self.dims_widget.slice.setEnabled(True)
+                self.dims_widget.series.setChecked(True)
+            elif dims >= 3:
+                self.dims_widget.volume.setEnabled(True)
+                self.dims_widget.slice.setEnabled(True)
+                self.dims_widget.volume.setChecked(True)
+            elif dims >= 2:
+                self.dims_widget.slice.setEnabled(True)
+                self.dims_widget.slice.setChecked(True)
+
     def _update_target(self, selected_layer: str) -> None:
         """Update the layer that is set to be the 'source labels' layer for copying labels from."""
 
@@ -101,6 +171,8 @@ class CopyLabelWidget(QWidget):
         else:
             self.target_layer = self.viewer.layers[selected_layer]
             self.target_dropdown.setCurrentText(selected_layer)
+
+        self.update_radiobuttons()
 
     def _make_copy_label_callback(self, layer: Labels) -> callable:
         def callback(layer, event):
@@ -148,39 +220,53 @@ class CopyLabelWidget(QWidget):
             return False
 
         if (
-            event.type == "mouse_press" and event.button == 2
-        ):  # copy a single slice only
-            self.copy_slice_label(
-                ndims,
-                dims_displayed,
-                ndims_options,
-                ndims_label,
-                coords,
-                selected_label,
-            )
-
-        elif (
             event.type == "mouse_press" and "Shift" in event.modifiers
-        ):  # copy a volume label
-            self.copy_volume_label(
-                ndims, ndims_options, ndims_label, coords, selected_label
-            )
+        ):  # copy a slice/volume/series label according to the radiobutton choice
+            if self.dims_widget.series.isChecked():
+                self.copy_label_nd(
+                    ndims,
+                    ndims_options,
+                    ndims_label,
+                    coords,
+                    selected_label,
+                    spatial_dims=4,
+                )
+            elif self.dims_widget.volume.isChecked():
+                self.copy_label_nd(
+                    ndims,
+                    ndims_options,
+                    ndims_label,
+                    coords,
+                    selected_label,
+                    spatial_dims=3,
+                )
+            elif self.dims_widget.slice.isChecked():
+                self.copy_slice_label(
+                    ndims,
+                    dims_displayed,
+                    ndims_options,
+                    ndims_label,
+                    coords,
+                    selected_label,
+                )
 
-    def copy_volume_label(
+    def copy_label_nd(
         self,
         ndims: int,
         ndims_options: int,
         ndims_label: int,
         coords: list[int],
         selected_label: int,
+        spatial_dims: int,
     ) -> None:
-        """Copy a volume label from the options layer to the target layer"""
-
+        """
+        Copy a label from the options layer to the target layer for the last `spatial_dims` dimensions.
+        spatial_dims: 2 (slice), 3 (volume), 4 (series)
+        """
         options_shape = self.source_layer.data.shape
         labels_shape = self.target_layer.data.shape
 
-        # Always compare the last 2 or 3 dims (y, x or z, y, x)
-        spatial_dims = min(3, min(len(options_shape), len(labels_shape)))
+        # Compare the last N spatial dims
         options_spatial = options_shape[-spatial_dims:]
         labels_spatial = labels_shape[-spatial_dims:]
 
@@ -188,7 +274,7 @@ class CopyLabelWidget(QWidget):
             msg = QMessageBox()
             msg.setWindowTitle("Invalid dimensions!")
             msg.setText(
-                f"The spatial dimensions (z, y, x) of the options layer and the target layer do not match.\n"
+                f"The spatial dimensions of the options layer and the target layer do not match.\n"
                 f"Label options layer has shape {options_shape}, target layer has shape {labels_shape}.\n"
                 f"Compared last {spatial_dims} dims: {options_spatial} vs {labels_spatial}."
             )
@@ -197,13 +283,8 @@ class CopyLabelWidget(QWidget):
             msg.exec_()
             return False
 
-        # Now calculate the remaining coords for the non-spatial dims
-        if spatial_dims == 3:
-            remaining_coords = coords[:-(3)]
-        elif spatial_dims == 2:
-            remaining_coords = coords[:-(2)]
-        else:
-            remaining_coords = []
+        # Calculate the remaining coords for the non-spatial dims
+        remaining_coords = coords[:-spatial_dims] if spatial_dims > 1 else coords
 
         slices = [slice(None)] * ndims
         for i, coord in enumerate(remaining_coords):

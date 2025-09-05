@@ -1,5 +1,7 @@
 import napari
+from napari_plane_sliders import PlaneSliderWidget
 from qtpy.QtWidgets import (
+    QGroupBox,
     QVBoxLayout,
     QWidget,
 )
@@ -24,6 +26,14 @@ class LayerControlsWidget(QWidget):
 
         ### create the dropdown for selecting label images
         layout.addWidget(self.label_manager)
+
+        ### plane sliders
+        plane_slider_box = QGroupBox("Plane Sliders")
+        plane_slider_layout = QVBoxLayout()
+        self.plane_sliders = PlaneSliderWidget(self.viewer)
+        plane_slider_layout.addWidget(self.plane_sliders)
+        plane_slider_box.setLayout(plane_slider_layout)
+        layout.addWidget(plane_slider_box)
 
         ### Add widget for copy-pasting labels from one layer to another
         self.copy_label_widget = CopyLabelWidget(self.viewer)

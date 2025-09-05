@@ -1,4 +1,4 @@
-from typing import Union
+import copy
 
 import dask.array as da
 import napari
@@ -12,6 +12,7 @@ from qtpy.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMessageBox,
+    QPushButton,
     QRadioButton,
     QVBoxLayout,
     QWidget,
@@ -53,7 +54,7 @@ class DimsRadioButtons(QWidget):
 
 
 class CopyLabelWidget(QWidget):
-    """Widget to create a "Labels Options" Layer from which labels can be copied to another layer"""
+    """Widget to copy labels from a source layer to a target layer."""
 
     def __init__(self, viewer: "napari.viewer.Viewer") -> None:
         super().__init__()
@@ -67,6 +68,7 @@ class CopyLabelWidget(QWidget):
         copy_labels_box = QGroupBox("Copy-paste labels")
         copy_labels_layout = QVBoxLayout()
 
+        # instruction label
         label = QLabel(
             "Use shift + click on the source layer to copy labels to the target layer."
         )
@@ -76,9 +78,12 @@ class CopyLabelWidget(QWidget):
         label.setFont(font)
         copy_labels_layout.addWidget(label)
 
-        self.preserve_label_value = QCheckBox("Preserve label value")
+        # Whether or not to preserve the source layer label value when copying or to use
+        # the next available label in the target layer
+        self.preserve_label_value = QCheckBox("Use source label value")
         copy_labels_layout.addWidget(self.preserve_label_value)
 
+        # Source layer and target layer dropdowns
         image_layout = QVBoxLayout()
         source_layout = QHBoxLayout()
         source_layout.addWidget(QLabel("Source labels"))
@@ -103,17 +108,28 @@ class CopyLabelWidget(QWidget):
 
         copy_labels_layout.addLayout(image_layout)
 
+        # Radiobuttons for selecting whether to copy a slice/volume/series
         self.dims_widget = DimsRadioButtons()
         copy_labels_layout.addWidget(self.dims_widget)
 
-        copy_labels_box.setLayout(copy_labels_layout)
+        # Undo the last copy action if possible
+        self.prev_state = None
+        self.coords_clipped = None
+        self.target_slices = None
+        self.undo_btn = QPushButton("Undo last copy")
+        self.undo_btn.setEnabled(False)
+        self.undo_btn.clicked.connect(self.undo)
+        copy_labels_layout.addWidget(self.undo_btn)
 
+        # assemble the layout
+        copy_labels_box.setLayout(copy_labels_layout)
         layout = QVBoxLayout()
         layout.addWidget(copy_labels_box)
         self.setLayout(layout)
 
     def _update_source(self, selected_layer: str) -> None:
-        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
+        """Update the layer that is set to be the 'source labels' layer for copying
+        labels from."""
 
         if self.source_layer is not None and self._source_callback is not None:
             try:
@@ -133,8 +149,20 @@ class CopyLabelWidget(QWidget):
 
         self.update_radiobuttons()
 
+    def _update_target(self, selected_layer: str) -> None:
+        """Update the layer to copy labels to."""
+
+        if selected_layer == "":
+            self.target_layer = None
+        else:
+            self.target_layer = self.viewer.layers[selected_layer]
+            self.target_dropdown.setCurrentText(selected_layer)
+
+        self.update_radiobuttons()
+
     def update_radiobuttons(self) -> None:
-        """Update the state of the dimension checkboxes based on the source and target layers."""
+        """Update the state of the dimension checkboxes based on the source and target
+        layers."""
 
         # All buttons off
         self.dims_widget.slice.setEnabled(False)
@@ -143,9 +171,11 @@ class CopyLabelWidget(QWidget):
         self.dims_widget.volume.setChecked(False)
         self.dims_widget.series.setEnabled(False)
         self.dims_widget.series.setChecked(False)
+        self.undo_btn.setEnabled(False)
 
         if self.source_layer is not None and self.target_layer is not None:
-            # Set the highest possible option based on the number of dimensions of the source and target layers
+            # Set the highest possible option based on the number of dimensions of the
+            # source and target layers
             source_dims = self.source_layer.data.ndim
             target_dims = self.target_layer.data.ndim
             dims = min(source_dims, target_dims)
@@ -163,22 +193,11 @@ class CopyLabelWidget(QWidget):
                 self.dims_widget.slice.setEnabled(True)
                 self.dims_widget.slice.setChecked(True)
 
-    def _update_target(self, selected_layer: str) -> None:
-        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
-
-        if selected_layer == "":
-            self.target_layer = None
-        else:
-            self.target_layer = self.viewer.layers[selected_layer]
-            self.target_dropdown.setCurrentText(selected_layer)
-
-        self.update_radiobuttons()
-
     def _make_copy_label_callback(self, layer: Labels) -> callable:
+        """Create a callback function for copying labels from the source layer to"""
+
         def callback(layer, event):
-            if event.type == "mouse_press" and (
-                event.button == 2 or "Shift" in event.modifiers
-            ):
+            if event.type == "mouse_press" and "Shift" in event.modifiers:
                 coords = layer.world_to_data(event.position)
                 coords = [int(c) for c in coords]
                 selected_label = layer.get_value(coords)
@@ -188,257 +207,162 @@ class CopyLabelWidget(QWidget):
         return callback
 
     def copy_label(self, event: Event, coords: list[int], selected_label: int) -> None:
-        """Copy a 2D or 3D label from this layer to a target layer"""
+        """Copy a 2D/3D/4D label from this layer to a target layer"""
 
-        if self.source_layer is None or self.target_layer is None:
-            return
-        dims_displayed = event.dims_displayed
-        ndims_options = len(self.source_layer.data.shape)
-        ndims_label = len(self.target_layer.data.shape)
-        ndims = len(coords)
+        if event.type == "mouse_press" and "Shift" in event.modifiers:
+            if self.source_layer is None or self.target_layer is None:
+                return
+            dims_displayed = event.dims_displayed
+            ndims_source = len(self.source_layer.data.shape)
+            ndims_target = len(self.target_layer.data.shape)
 
-        # ensure minimal bit depth of 16 bit, check later on if 32 bit is needed and convert if asked.
-        if (
-            self.target_layer.data.dtype == np.int8
-            or self.target_layer.data.dtype == np.uint8
-        ):
-            self.target_layer.data = self.target_layer.data.astype(np.uint16)
+            # ensure minimal bit depth of 16 bit, check later on if 32 bit is needed and
+            # convert if asked.
+            if (
+                self.target_layer.data.dtype == np.int8
+                or self.target_layer.data.dtype == np.uint8
+            ):
+                self.target_layer.data = self.target_layer.data.astype(np.uint16)
 
-        if not (
-            ndims_options == ndims_label
-            or ndims_options == ndims_label + 1
-            or ndims_options == ndims_label - 1
-        ):
-            msg = QMessageBox()
-            msg.setWindowTitle("Invalid dimensions!")
-            msg.setText(
-                f"Invalid dimensions! Got {ndims_options} for the options layer and {ndims_label} for the target layer."
-            )
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-
-        if (
-            event.type == "mouse_press" and "Shift" in event.modifiers
-        ):  # copy a slice/volume/series label according to the radiobutton choice
+            # Check whether to copy a slice/volume/series label according to the
+            # radiobutton choice
             if self.dims_widget.series.isChecked():
-                self.copy_label_nd(
-                    ndims,
-                    ndims_options,
-                    ndims_label,
-                    coords,
-                    selected_label,
-                    spatial_dims=4,
-                )
+                n_dims_copied = 4
             elif self.dims_widget.volume.isChecked():
-                self.copy_label_nd(
-                    ndims,
-                    ndims_options,
-                    ndims_label,
-                    coords,
-                    selected_label,
-                    spatial_dims=3,
-                )
-            elif self.dims_widget.slice.isChecked():
-                self.copy_slice_label(
-                    ndims,
-                    dims_displayed,
-                    ndims_options,
-                    ndims_label,
-                    coords,
-                    selected_label,
-                )
+                n_dims_copied = 3
+            else:
+                n_dims_copied = 2
 
-    def copy_label_nd(
-        self,
-        ndims: int,
-        ndims_options: int,
-        ndims_label: int,
-        coords: list[int],
-        selected_label: int,
-        spatial_dims: int,
-    ) -> None:
-        """
-        Copy a label from the options layer to the target layer for the last `spatial_dims` dimensions.
-        spatial_dims: 2 (slice), 3 (volume), 4 (series)
-        """
-        options_shape = self.source_layer.data.shape
-        labels_shape = self.target_layer.data.shape
+            # Select dims to copy
+            source_shape = self.source_layer.data.shape
+            labels_shape = self.target_layer.data.shape
+            source_dims_to_copy = source_shape[-n_dims_copied:]
+            target_dims_to_copy = labels_shape[-n_dims_copied:]
 
-        # Compare the last N spatial dims
-        options_spatial = options_shape[-spatial_dims:]
-        labels_spatial = labels_shape[-spatial_dims:]
-
-        if options_spatial != labels_spatial:
-            msg = QMessageBox()
-            msg.setWindowTitle("Invalid dimensions!")
-            msg.setText(
-                f"The spatial dimensions of the options layer and the target layer do not match.\n"
-                f"Label options layer has shape {options_shape}, target layer has shape {labels_shape}.\n"
-                f"Compared last {spatial_dims} dims: {options_spatial} vs {labels_spatial}."
-            )
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-
-        # Calculate the remaining coords for the non-spatial dims
-        remaining_coords = coords[:-spatial_dims] if spatial_dims > 1 else coords
-
-        slices = [slice(None)] * ndims
-        for i, coord in enumerate(remaining_coords):
-            slices[i] = coord
-
-        self._copy(slices, ndims_options, ndims_label, coords, selected_label)
-
-    def copy_slice_label(
-        self,
-        ndims: int,
-        dims_displayed: int,
-        ndims_options: int,
-        ndims_label: int,
-        coords: list[int],
-        selected_label: int,
-    ) -> None:
-        """Copy a single slice of a label from the source layer to the target layer"""
-
-        # Determine how many spatial dims to check (2 or 3)
-        spatial_dims = min(
-            3, min(len(self.source_layer.data.shape), len(self.target_layer.data.shape))
-        )
-        options_shape = self.source_layer.data.shape[-spatial_dims:]
-        target_shape = self.target_layer.data.shape[-spatial_dims:]
-
-        if options_shape != target_shape:
-            msg = QMessageBox()
-            msg.setWindowTitle("Invalid dimensions!")
-            msg.setText(
-                f"The spatial dimensions of the options layer and the target layer do not match.\n"
-                f"Label options layer has shape {self.source_layer.data.shape}, target layer has shape {self.target_layer.data.shape}.\n"
-                f"Last {spatial_dims} dims: {options_shape} vs {target_shape}."
-            )
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-
-        # Create a list of `slice(None)` for all dimensions of self.source_layer.data
-        slices = [slice(None)] * ndims
-        if ndims_options == ndims_label - 1:
-            dims_displayed = [dim - 1 for dim in dims_displayed]
-        for i in range(ndims):
-            if i not in dims_displayed:
-                slices[i] = coords[
-                    i
-                ]  # Replace the slice with a specific coordinate for slider dims
-        self._copy(slices, ndims_options, ndims_label, coords, selected_label)
-
-    def _copy(
-        self,
-        slices: list[Union[int, slice]],
-        ndims_options: int,
-        ndims_label: int,
-        coords: list[int],
-        selected_label: int,
-    ) -> None:
-        """Copy a label from the options layer to the target layer"""
-
-        # Clip coords to the shape of the label manager's data
-        coords_clipped, label_slices = self._clip_coords(
-            slices, ndims_options, ndims_label, coords
-        )
-
-        # Create mask
-        if isinstance(self.source_layer.data, da.core.Array):
-            mask = self.source_layer.data[tuple(slices)].compute() == selected_label
-        else:
-            mask = self.source_layer.data[tuple(slices)] == selected_label
-
-        self._set_label(
-            label_slices,
-            coords_clipped,
-            mask,
-            target_label=selected_label
-            if self.preserve_label_value.isChecked()
-            else None,
-        )
-
-        # refresh the layer
-        self.target_layer.data = self.target_layer.data
-
-    def _clip_coords(
-        self,
-        slices: list[Union[int, slice]],
-        ndims_options: int,
-        ndims_label: int,
-        coords: list[int],
-    ) -> tuple[list[int], list[int]]:
-        """Clip the coordinates to the shape of the target data"""
-
-        if ndims_options == ndims_label + 1:
-            coords_clipped = coords[1:]
-            label_slices = slices[1:]
-        elif ndims_options == ndims_label - 1:
-            coords_clipped = [self.viewer.dims.current_step[0], *coords]
-            label_slices = [self.viewer.dims.current_step[0], *slices]
-        else:
-            coords_clipped = coords
-            label_slices = slices
-
-        return coords_clipped, label_slices
-
-    def _set_label(
-        self,
-        label_slices: list[int],
-        coords_clipped: list[int],
-        mask: np.ndarray,
-        target_label: int = None,
-    ) -> None:
-        """Set the new label in the target stack, either preserving the label value or assigning a new one"""
-
-        # Assign a new label value if None is provided
-        if target_label is None:
-            target_label = np.max(self.target_layer.data) + 1
-            if target_label > 65535 and self.target_layer.data.dtype == np.uint16:
+            # Check if the dimensions to copy match
+            if source_dims_to_copy != target_dims_to_copy:
                 msg = QMessageBox()
-                msg.setWindowTitle("Invalid label!")
+                msg.setWindowTitle("Invalid dimensions!")
                 msg.setText(
-                    f"Label {target_label} exceeds bit depth! Convert to 32 bit?"
+                    f"The dimensions of the source layer and the target layer do not match.\n"
+                    f"Label source layer has shape {source_shape}, target layer has shape {labels_shape}.\n"
+                    f"Compared last {n_dims_copied} dims: {source_dims_to_copy} vs {target_dims_to_copy}."
                 )
                 msg.setIcon(QMessageBox.Information)
-                msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+                msg.setStandardButtons(QMessageBox.Ok)
                 msg.exec_()
-                if msg.clickedButton() == msg.button(
-                    QMessageBox.Ok
-                ):  # Check if Ok was clicked
-                    self.target_layer.data = self.target_layer.data.astype(np.uint32)
-                elif msg.clickedButton() == msg.button(
-                    QMessageBox.Cancel
-                ):  # Check if Cancel was clicked
-                    return False
+                return False
 
-        # Get the target layer data
-        target_stack = self.target_layer.data
+            # Assign a new label value if None is provided
+            target_label = (
+                selected_label if self.preserve_label_value.isChecked() else None
+            )
+            if target_label is None:
+                target_label = np.max(self.target_layer.data) + 1
+                if target_label > 65535 and self.target_layer.data.dtype == np.uint16:
+                    msg = QMessageBox()
+                    msg.setWindowTitle("Invalid label!")
+                    msg.setText(
+                        f"Label {target_label} exceeds bit depth! Convert to 32 bit?"
+                    )
+                    msg.setIcon(QMessageBox.Information)
+                    msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+                    msg.exec_()
+                    if msg.clickedButton() == msg.button(
+                        QMessageBox.Ok
+                    ):  # Check if Ok was clicked
+                        self.target_layer.data = self.target_layer.data.astype(
+                            np.uint32
+                        )
+                    elif msg.clickedButton() == msg.button(
+                        QMessageBox.Cancel
+                    ):  # Check if Cancel was clicked
+                        return False
 
-        # Select the correct stack for 3D/4D data
-        if isinstance(target_stack, da.core.Array):
-            target_stack = target_stack[coords_clipped[0]].compute()
-            orig_label = target_stack[tuple(coords_clipped[1:])]
-            sliced_data = target_stack[tuple(label_slices[1:])]
-        else:
+            # Create source_slices for all dimensions of the source layer
+            source_slices = [slice(None)] * ndims_source
+
+            # When copying 2D labels, we need to check the dimensions displayed, in case
+            # the sure is copying from one of the orthoviews.
+            dims_difference = ndims_source - ndims_target
+            if n_dims_copied == 2:
+                # Create a list of `slice(None)` for all dimensions of self.source_layer.data
+                if dims_difference < 0:
+                    dims_displayed = [dim + dims_difference for dim in dims_displayed]
+                for i in range(ndims_source):
+                    if i not in dims_displayed:
+                        source_slices[i] = coords[
+                            i
+                        ]  # Replace the slice with a specific coordinate for slider dims
+
+            else:
+                # Calculate the coords for the remaining dims
+                remaining_coords = coords[:-n_dims_copied]
+                for i, coord in enumerate(remaining_coords):
+                    source_slices[i] = coord
+
+            # Clip coords to the shape of the target data
+            if dims_difference > 0:
+                coords_clipped = coords[dims_difference:]
+                target_slices = source_slices[dims_difference:]
+            elif dims_difference < 0:
+                coords_clipped = [
+                    *self.viewer.dims.current_step[: abs(dims_difference)],
+                    *coords,
+                ]
+                target_slices = [
+                    *self.viewer.dims.current_step[: abs(dims_difference)],
+                    *source_slices,
+                ]
+            else:
+                coords_clipped = coords
+                target_slices = source_slices
+
+            # Create mask
+            if isinstance(self.source_layer.data, da.core.Array):
+                mask = (
+                    self.source_layer.data[tuple(source_slices)].compute()
+                    == selected_label
+                )
+            else:
+                mask = self.source_layer.data[tuple(source_slices)] == selected_label
+
+            # Select the correct stack for 2D/3D/4D data
             orig_label = self.target_layer.data[tuple(coords_clipped)]
-            sliced_data = self.target_layer.data[tuple(label_slices)]
+            sliced_data = self.target_layer.data[tuple(target_slices)]
+            if isinstance(sliced_data, da.core.Array):
+                sliced_data = sliced_data.compute()
 
-        orig_mask = sliced_data == orig_label
-        sliced_data[orig_mask] = 0
-        sliced_data[mask] = target_label
+            # Store previous state for undo
+            self.prev_state = copy.deepcopy(sliced_data)
+            self.target_slices = copy.deepcopy(target_slices)
+            self.coords_clipped = copy.deepcopy(coords_clipped)
 
-        if isinstance(self.target_layer.data, da.core.Array):
-            target_stack[tuple(label_slices[1:])] = sliced_data
-            self.target_layer.data[coords_clipped[0]] = target_stack
-        else:
-            self.target_layer.data[tuple(label_slices)] = sliced_data
+            # Replace label in target layer data
+            orig_mask = sliced_data == orig_label
+            sliced_data[orig_mask] = 0
+            sliced_data[mask] = target_label
+
+            self.target_layer.data[tuple(target_slices)] = sliced_data
+            self.undo_btn.setEnabled(True)
+
+            # refresh the layer
+            self.target_layer.data = self.target_layer.data
+
+    def undo(self) -> None:
+        """Undo the last label copy operation"""
+
+        if hasattr(self, "prev_state") and self.prev_state is not None:
+            self.target_layer.data[tuple(self.target_slices)] = self.prev_state
+
+            # refresh the layer
+            self.target_layer.data = self.target_layer.data
+
+            # set back to None and disable button
+            self.prev_state = None
+            self.coords_clipped = None
+            self.target_slices = None
+            self.undo_btn.setEnabled(False)
 
     def sync_click(
         self, orig_layer: Labels, copied_layer: Labels, event: Event

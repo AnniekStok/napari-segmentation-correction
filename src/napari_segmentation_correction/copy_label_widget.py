@@ -213,19 +213,34 @@ class CopyLabelWidget(QWidget):
 
         def callback(layer, event):
             if event.type == "mouse_press" and "Shift" in event.modifiers:
-                coords = layer.world_to_data(event.position)
-                coords = [int(c) for c in coords]
-                selected_label = layer.get_value(coords)
-                if selected_label != 0:
-                    self.copy_label(event, coords, selected_label)
+                self.copy_label(event)
 
         return callback
 
-    def copy_label(self, event: Event, coords: list[int], selected_label: int) -> None:
+    def copy_label(self, event: Event, source_layer: Labels | None = None) -> None:
         """Copy a 2D/3D/4D label from this layer to a target layer"""
 
         if self.source_layer is None or self.target_layer is None:
             return
+
+        # extract label value from source layer (orthoview or self.source_layer)
+        source_layer = source_layer if source_layer is not None else self.source_layer
+        selected_label = source_layer.get_value(
+            event.position,
+            view_direction=event.view_direction,
+            dims_displayed=event.dims_displayed,
+            world=True,
+        )
+
+        # do not process clicking on the background
+        if selected_label == 0:
+            return
+
+        # extract coords from click position
+        coords = self.source_layer.world_to_data(event.position)
+        coords = [int(c) for c in coords]
+
+        # Get dimensions of source and target layers
         dims_displayed = event.dims_displayed
         ndims_source = len(self.source_layer.data.shape)
         ndims_target = len(self.target_layer.data.shape)
@@ -235,6 +250,8 @@ class CopyLabelWidget(QWidget):
         if target_label is None:
             target_label = np.max(self.target_layer.data) + 1
 
+        # Check if the target label is within the dtype range of the target layer, if not
+        # suggest converting to a larger dtype
         within_range, next_dtype = check_value_dtype(
             target_label, self.target_layer.data.dtype
         )
@@ -371,17 +388,11 @@ class CopyLabelWidget(QWidget):
     ) -> None:
         """Forward the click event from orthogonal views"""
 
-        if orig_layer is self.source_layer and event.type == "mouse_press":
-            selected_label = copied_layer.get_value(
-                event.position,
-                view_direction=event.view_direction,
-                dims_displayed=event.dims_displayed,
-                world=True,
-            )
-
-            if selected_label != 0:
-                coords = orig_layer.world_to_data(event.position)
-                coords = [int(c) for c in coords]
-
-                # Process the click event
-                self.copy_label(event, coords, selected_label)
+        if (
+            orig_layer is self.source_layer
+            and event.type == "mouse_press"
+            and "Shift" in event.modifiers
+        ):
+            # pass the copied layer for extracting the label value, because an orthoview
+            # was used
+            self.copy_label(event, copied_layer)

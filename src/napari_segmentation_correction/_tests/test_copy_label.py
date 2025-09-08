@@ -33,7 +33,7 @@ def make_layers():
     return _make_layers
 
 
-def test_copy_2d(make_event, make_napari_viewer, qtbot):
+def test_copy_2d(make_event, make_napari_viewer):
     viewer = make_napari_viewer()
     src = viewer.add_labels(np.zeros((64, 64), dtype=np.uint16))
     tgt = viewer.add_labels(np.zeros((64, 64), dtype=np.uint16))

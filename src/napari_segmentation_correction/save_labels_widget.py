@@ -119,17 +119,7 @@ class SaveLabelsWidget(QWidget):
 
         destination = QFileDialog.getExistingDirectory(self, "Select Output Folder")
 
-        print(
-            "save with this info",
-            ndim,
-            split_time_points,
-            dtype,
-            use_compression,
-            destination,
-        )
-
         if ndim >= 3 and split_time_points:
-            print("saving separate time points")
             for i in range(data.shape[0]):
                 if isinstance(data, da.core.Array):
                     current_stack = data[i].compute().astype(dtype)

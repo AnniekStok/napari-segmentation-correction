@@ -18,6 +18,7 @@ from .image_calculator import ImageCalculator
 from .label_interpolator import InterpolationWidget
 from .layer_controls import LayerControlsWidget
 from .layer_manager import LayerManager
+from .plot_widget import PlotWidget
 from .regionprops_widget import RegionPropsWidget
 from .select_delete_widget import SelectDeleteMask
 from .size_filter_widget import SizeFilterWidget
@@ -103,12 +104,16 @@ class AnnotateLabelsND(QWidget):
         scroll_area.setWidgetResizable(True)
         self.tab_widget.addTab(scroll_area, "Editing")
 
-        ### Add widget for adding overview table
+        ### Add widget for reginproperties
         self.regionprops_widget = RegionPropsWidget(self.viewer, self.label_manager)
         props_scroll_area = QScrollArea()
         props_scroll_area.setWidget(self.regionprops_widget)
         props_scroll_area.setWidgetResizable(True)
         self.tab_widget.addTab(props_scroll_area, "Region properties")
+
+        ### Add widget for displaying plot with regionprops
+        self.plot_widget = PlotWidget(self.label_manager)
+        self.tab_widget.addTab(self.plot_widget, "Plot")
 
         # Add the tab widget to the main layout
         self.main_layout = QVBoxLayout()

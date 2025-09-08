@@ -12,7 +12,6 @@ from skimage import measure
 
 from .custom_table_widget import ColoredTableWidget
 from .layer_manager import LayerManager
-from .plot_widget import PlotWidget
 
 
 class RegionPropsWidget(QWidget):
@@ -37,8 +36,6 @@ class RegionPropsWidget(QWidget):
         )
         self.regionprops_layout = QVBoxLayout()
         self.regionprops_layout.addWidget(self.table_btn)
-        self.plotwidget = PlotWidget(self.label_manager)
-        self.regionprops_layout.addWidget(self.plotwidget)
         self.regionprops_layout.addStretch()
         self.setLayout(self.regionprops_layout)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)

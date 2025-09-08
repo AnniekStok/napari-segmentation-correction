@@ -18,7 +18,6 @@ from .image_calculator import ImageCalculator
 from .label_interpolator import InterpolationWidget
 from .layer_controls import LayerControlsWidget
 from .layer_manager import LayerManager
-from .point_filter import PointFilter
 from .regionprops_widget import RegionPropsWidget
 from .select_delete_widget import SelectDeleteMask
 from .size_filter_widget import SizeFilterWidget
@@ -56,10 +55,6 @@ class AnnotateLabelsND(QWidget):
 
         orth_view_manager = _get_manager(self.viewer)
         orth_view_manager.register_layer_hook(Labels, label_options_click_hook)
-
-        ### Add widget for filtering by points layer
-        point_filter = PointFilter(self.viewer, self.label_manager)
-        self.edit_layout.addWidget(point_filter)
 
         ### Add widget for connected component labeling
         conn_comp_widget = ConnectedComponents(self.viewer, self.label_manager)

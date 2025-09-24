@@ -96,7 +96,11 @@ class CopyLabelWidget(QWidget):
         # Whether or not to preserve the source layer label value when copying or to use
         # the next available label in the target layer
         self.preserve_label_value = QCheckBox("Use source label value")
-        copy_labels_layout.addWidget(self.preserve_label_value)
+        self.preserve_existing_labels = QCheckBox("Preserve target labels")
+        option_layout = QHBoxLayout()
+        option_layout.addWidget(self.preserve_label_value)
+        option_layout.addWidget(self.preserve_existing_labels)
+        copy_labels_layout.addLayout(option_layout)
 
         # Source layer and target layer dropdowns
         image_layout = QVBoxLayout()
@@ -199,7 +203,7 @@ class CopyLabelWidget(QWidget):
                 self.dims_widget.series.setEnabled(True)
                 self.dims_widget.volume.setEnabled(True)
                 self.dims_widget.slice.setEnabled(True)
-                self.dims_widget.series.setChecked(True)
+                self.dims_widget.volume.setChecked(True)
             elif dims >= 3:
                 self.dims_widget.volume.setEnabled(True)
                 self.dims_widget.slice.setEnabled(True)
@@ -222,6 +226,30 @@ class CopyLabelWidget(QWidget):
 
         if self.source_layer is None or self.target_layer is None:
             return
+
+        # Check whether to copy a slice/volume/series label according to the
+        # radiobutton choice
+        if self.dims_widget.series.isChecked():
+            n_dims_copied = 4
+        elif self.dims_widget.volume.isChecked():
+            n_dims_copied = 3
+        else:
+            n_dims_copied = 2
+
+        if n_dims_copied == 4 and (
+            isinstance(self.source_layer.data, da.core.Array)
+            or isinstance(self.target_layer.data, da.core.Array)
+        ):
+            msg = QMessageBox()
+            msg.setWindowTitle("Warning")
+            msg.setText(
+                "Copying labels in 4D dimensions between dask arrays is slow, are you sure you want to continue?"
+            )
+            msg.setIcon(QMessageBox.Information)
+            msg.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+            result = msg.exec_()
+            if result != QMessageBox.Ok:
+                return
 
         # extract label value from source layer (orthoview or self.source_layer)
         source_layer = source_layer if source_layer is not None else self.source_layer
@@ -269,15 +297,6 @@ class CopyLabelWidget(QWidget):
                     self.target_layer.data = self.target_layer.data.astype(next_dtype)
                 else:
                     return
-
-        # Check whether to copy a slice/volume/series label according to the
-        # radiobutton choice
-        if self.dims_widget.series.isChecked():
-            n_dims_copied = 4
-        elif self.dims_widget.volume.isChecked():
-            n_dims_copied = 3
-        else:
-            n_dims_copied = 2
 
         # Select dims to copy
         source_shape = self.source_layer.data.shape
@@ -359,8 +378,11 @@ class CopyLabelWidget(QWidget):
 
         # Replace label in target layer data
         orig_mask = sliced_data == orig_label
-        sliced_data[orig_mask] = 0
-        sliced_data[mask] = target_label
+        if not self.preserve_existing_labels.isChecked():
+            sliced_data[orig_mask] = 0
+            sliced_data[mask] = target_label
+        else:
+            sliced_data[orig_mask & (sliced_data == 0) & mask] = target_label
 
         self.target_layer.data[tuple(target_slices)] = sliced_data
         self.undo_btn.setEnabled(True)

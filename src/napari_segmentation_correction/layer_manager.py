@@ -15,15 +15,14 @@ class LayerManager(QWidget):
     """QComboBox widget with functions for updating the selected layer and to update the list of options when the list of layers is modified."""
 
     layer_update = Signal()
+
     def __init__(self, viewer: napari.Viewer):
         super().__init__()
 
         self.viewer = viewer
         self._selected_layer = None
-        self.label_dropdown = LayerDropdown(
-            self.viewer, (napari.layers.Labels)
-        )
-        self.label_dropdown.layer_changed.connect(self._update_labels)
+        self.label_dropdown = LayerDropdown(self.viewer, (napari.layers.Labels))
+        self.label_dropdown.layer_changed.connect(self.set_active_layer)
 
         ### Add option to convert dask array to in-memory array
         self.convert_to_array_btn = QPushButton("Convert to in-memory array")
@@ -50,7 +49,7 @@ class LayerManager(QWidget):
         if layer != self._selected_layer:
             self._selected_layer = layer
 
-    def _update_labels(self, selected_layer) -> None:
+    def set_active_layer(self, selected_layer) -> None:
         """Update the layer that is set to be the 'labels' layer that is being edited."""
 
         if selected_layer == "":
@@ -73,3 +72,4 @@ class LayerManager(QWidget):
                 current_stack = self._selected_layer.data[i].compute()
                 stack.append(current_stack)
             self._selected_layer.data = np.stack(stack, axis=0)
+            self.convert_to_array_btn.setEnabled(False)

@@ -7,6 +7,7 @@ from matplotlib.backends.backend_qt5agg import (
     NavigationToolbar2QT,
 )
 from matplotlib.colors import ListedColormap, to_rgb
+from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
@@ -71,12 +72,15 @@ class PlotWidget(QWidget):
         dropdown_layout.addLayout(color_group_layout)
         dropdown_widget = QWidget()
         dropdown_widget.setLayout(dropdown_layout)
+        dropdown_layout.setAlignment(Qt.AlignTop)
 
         # Create and apply a horizontal layout for the dropdown widget, toolbar and canvas.
         plotting_layout = QVBoxLayout()
         plotting_layout.addWidget(dropdown_widget)
         plotting_layout.addWidget(self.toolbar)
         plotting_layout.addWidget(self.plot_canvas)
+        plotting_layout.setAlignment(Qt.AlignTop)
+
         self.setLayout(plotting_layout)
         self.setMinimumHeight(500)
 

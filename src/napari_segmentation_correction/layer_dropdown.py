@@ -1,4 +1,5 @@
 import napari
+from napari.utils.events import Event
 from PyQt5.QtCore import pyqtSignal
 from qtpy.QtWidgets import QComboBox
 
@@ -27,12 +28,13 @@ class LayerDropdown(QComboBox):
         """Update dropdown and make new layer responsive to name changes"""
 
         layer = event.value
+        if isinstance(layer, self.layer_type):
 
-        @layer.events.name.connect
-        def _on_rename(name_event):
+            @layer.events.name.connect
+            def _on_rename(name_event):
+                self._update_dropdown()
+
             self._update_dropdown()
-
-        self._update_dropdown()
 
     def _on_selection_changed(self) -> None:
         """Request signal emission if the user changes the layer selection."""
@@ -41,31 +43,37 @@ class LayerDropdown(QComboBox):
             len(self.viewer.layers.selection) == 1
         ):  # Only consider single layer selection
             selected_layer = self.viewer.layers.selection.active
-            if isinstance(selected_layer, self.layer_type):
+            if (
+                isinstance(selected_layer, self.layer_type)
+                and selected_layer != self.selected_layer
+            ):
                 self.setCurrentText(selected_layer.name)
                 self._emit_layer_changed()
 
-    def _update_dropdown(self) -> None:
+    def _update_dropdown(self, event: Event | None = None) -> None:
         """Update the list of options in the dropdown menu whenever the list of layers is changed"""
 
-        selected_layer = self.currentText()
-        self.clear()
-        layers = [
-            layer for layer in self.viewer.layers if isinstance(layer, self.layer_type)
-        ]
-        items = []
-        if self.allow_none:
-            self.addItem("No selection")
-            items.append("No selection")
+        if event is None or isinstance(event.value, self.layer_type):
+            selected_layer = self.currentText()
+            self.clear()
+            layers = [
+                layer
+                for layer in self.viewer.layers
+                if isinstance(layer, self.layer_type)
+            ]
+            items = []
+            if self.allow_none:
+                self.addItem("No selection")
+                items.append("No selection")
 
-        for layer in layers:
-            self.addItem(layer.name)
-            items.append(layer.name)
-            layer.events.name.connect(self._update_dropdown)
+            for layer in layers:
+                self.addItem(layer.name)
+                items.append(layer.name)
+                layer.events.name.connect(self._update_dropdown)
 
-        # In case the currently selected layer is one of the available items, set it again to the current value of the dropdown.
-        if selected_layer in items:
-            self.setCurrentText(selected_layer)
+            # In case the currently selected layer is one of the available items, set it again to the current value of the dropdown.
+            if selected_layer in items:
+                self.setCurrentText(selected_layer)
 
     def _emit_layer_changed(self) -> None:
         """Emit a signal holding the currently selected layer"""
@@ -79,4 +87,16 @@ class LayerDropdown(QComboBox):
         else:
             self.selected_layer = None
             selected_layer_name = ""
+
         self.layer_changed.emit(selected_layer_name)
+
+    def deleteLater(self) -> None:
+        """Ensure all connections are disconnected before deletion."""
+        self.viewer.layers.events.inserted.disconnect(self._on_insert)
+        self.viewer.layers.events.changed.disconnect(self._update_dropdown)
+        self.viewer.layers.events.removed.disconnect(self._update_dropdown)
+        self.viewer.layers.selection.events.changed.disconnect(
+            self._on_selection_changed
+        )
+        self.currentTextChanged.disconnect(self._emit_layer_changed)
+        super().deleteLater()

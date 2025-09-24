@@ -148,7 +148,9 @@ class PropertyFilterWidget(QWidget):
                             df_subset[prop] >= value, "label"
                         ]
 
-                    if isinstance(self.label_manager.selected_layer.data, da.Array):
+                    if isinstance(
+                        self.label_manager.selected_layer.data, da.core.Array
+                    ):
                         labels = np.array(
                             self.label_manager.selected_layer.data[time_point].compute()
                         )
@@ -168,7 +170,9 @@ class PropertyFilterWidget(QWidget):
                     else:
                         new_labels = np.where(mask, labels, 0)
 
-                    if isinstance(self.label_manager.selected_layer.data, da.Array):
+                    if isinstance(
+                        self.label_manager.selected_layer.data, da.core.Array
+                    ):
                         tifffile.imwrite(
                             os.path.join(
                                 outputdir,
@@ -184,7 +188,7 @@ class PropertyFilterWidget(QWidget):
                     else:
                         filtered_label_imgs.append(new_labels)
 
-                if isinstance(self.label_manager.selected_layer.data, da.Array):
+                if isinstance(self.label_manager.selected_layer.data, da.core.Array):
                     file_list = [
                         os.path.join(outputdir, fname)
                         for fname in os.listdir(outputdir)

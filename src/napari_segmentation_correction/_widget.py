@@ -21,7 +21,6 @@ from .layer_manager import LayerManager
 from .plot_widget import PlotWidget
 from .regionprops_widget import RegionPropsWidget
 from .select_delete_widget import SelectDeleteMask
-from .size_filter_widget import SizeFilterWidget
 from .smoothing_widget import SmoothingWidget
 from .threshold_widget import ThresholdWidget
 
@@ -60,10 +59,6 @@ class AnnotateLabelsND(QWidget):
         ### Add widget for connected component labeling
         conn_comp_widget = ConnectedComponents(self.viewer, self.label_manager)
         self.edit_layout.addWidget(conn_comp_widget)
-
-        ### Add widget for size filtering
-        size_filter_widget = SizeFilterWidget(self.viewer, self.label_manager)
-        self.edit_layout.addWidget(size_filter_widget)
 
         ### Add widget for smoothing labels
         smooth_widget = SmoothingWidget(self.viewer, self.label_manager)

@@ -31,30 +31,65 @@ To install latest development version :
 ## Usage
 This plugin serves as a toolbox aiming to help with correcting segmentation results.
 Functionalities:
-- Orthogonal views for 3D data based on the [MultipleViewerWidget](https://github.com/napari/napari/blob/e490e5535438ab338a23b17905a1952f15a6d27a/examples/multiple_viewer_widget.py).
-- explore label properties (scikit-image regionprops) in a table widget (based on [napari-skimage-regionprops](https://github.com/haesleinhuepf/napari-skimage-regionprops)) and a Matplotlib plot.
-- select/delete labels using a points layer
-- copy labels from a 2-5 dimensional array with multiple segmentation options to your current 2-4 dimensional label layer.
-- label connected components (scikit-image)
-- filter labels by number of pixels
-- smooth labels (using a median filter)
-- erode/dilate labels (scipy.ndimage and scikit-image)
-- binarize an image or labels layer by applying an intensity threshold
-- image calculator for mathematical operations on two images
-- selecting/deleting labels that overlap with a binary mask
+- Orthogonal views for 3D data.
+- Copy labels from a 2-5 dimensional array with multiple segmentation options to your current 2-5 dimensional label layer.
+- Label connected components, keep the largest connected cluster of labels, keep the largest fragment per label.
+- Smooth labels using a median filter.
+- Erode/dilate labels (scipy.ndimage and scikit-image)
+- Binarize an image or labels layer by applying an intensity threshold
+- Image calculator for mathematical operations on two images
+- Select/delete labels using a mask.
+- Binary mask interpolation in the z or time dimension.
+- Explore label properties (scikit-image regionprops) in a table widget and a Matplotlib plot.
+- Filter labels by properties.
 
 ### Copy labels between different labels layers
-![](instructions/label_options.gif)
+![copy_labels](https://github.com/user-attachments/assets/4f6a638d-c6bc-4a61-bdcd-6cc29b6f817e)
 
-2D or 3D labels can be copied from a source layer to a target layer. The data in the source layer should have the same shape as the target layer, but can optionally have one extra dimension, so it is possible to stack multiple segmentation solutions as channels, and copy labels from different channels to the target layer. To copy 2D or 3D labels from one layer to another, follow these steps: 
-1) If needed, first stack multiple segmentation solutions along a new axis (as if they are channels). Select the labels layer from which you want to copy, and click 'Convert current label layer to label options layer'. A new layer with outlined labels will be created.
-2) Make sure the labels layer to which you want to copy is your new current label layer (clicking on it will activate it, or select it from the dropdown at the top of the Editing tab). 
-3) With the layer named 'labels options' selected, Shift+Click on the main view or any of the orthogonal views to copy the label you clicked on to the target layer. Alternatively, right-mouse click will copy only the 2D label from the current view (yx for the main view, xz and yz for the orthogonal views) to the corresponding position in target layer.
-Note: make sure that your target layer does not accidentally have a channel dimension as well. This may happen if you first created the label options layer with multiple channels, and then created a new empty labels layer, because Napari will automatically assign the same number of dimensions as are currently in the viewer.
+<table>
+  <tr>
+    <td width="50%">
+      2D/3D/4D labels can be copied from a source layer to a target layer via <b>SHIFT+CLICK</b>.<br><br>
+      The data in the source layer should have the same shape as the target layer, but can optionally have one extra dimension (e.g. stack multiple segmentation solutions as channels).<br><br>
+      To copy labels, select a 'source' and a 'target' labels layer in the dropdown. By default, the source layer will be displayed as contours.<br><br>
+      Select whether to copy a slice, a volume, or a series across time.<br><br>
+      Checking <b>Use source label value</b> keeps the original label values.<br><br>
+      Selecting <b>Preserve target labels</b> only allows copying into background (0) regions. Otherwise, SHIFT+CLICK replaces the existing label region.
+    </td>
+    <td width="50%">
+      <img alt="copy_labels" src="https://github.com/user-attachments/assets/448252f2-e6a0-4bc9-ae30-42aa24aadc04" />
+    </td>
+  </tr>
+</table>
+
+### Connected component analysis
+There are shortcut buttons for connected components labeling, keeping the largest cluster of connected labels, and to keep the largest fragment per label. 
+
+<img width="910" height="770" alt="conncomp" src="https://github.com/user-attachments/assets/8c7f41b2-fa58-48cc-8921-29e703195401" />
 
 ### Select / delete labels that overlap with a binary mask
-![](instructions/select_labels_by_mask.png)
-All labels that share any pixel overlap with the mask are selected.
+All labels that share any pixel overlap with the mask are selected or removed.
+<img width="1500" height="844" alt="select_delete" src="https://github.com/user-attachments/assets/c3d96516-d34d-468c-9c51-3fed4e904463" />
+
+### Binary mask interpolation
+It is possible to interpolate a 3D or 4D mask to fill in the region in between. In 3D, this means creating a 3D volume from slices, in 4D this means creating a time series of a volume that linearly 'morphs' into a different shape. 
+
+<table>
+  <tr>
+    <td width="40%">
+      <img width="400" alt="interpolate" src="https://github.com/user-attachments/assets/74115915-936a-48cb-a6b3-415d09a9ed48" />
+    </td>
+    <td width="60%">
+      <img width="600" alt="labelinterpolation gif" src="https://github.com/user-attachments/assets/c7384096-478d-448e-882c-691d568e83f8" />
+    </td>
+  </tr>
+</table>
+
+### Measuring label properties
+You can measure label properties, including intensity (if a matching image layer is provided), area/volume, perimeter/surface area, circularity/sphericity, ellipse/ellipsoid axes in the 'Region Properties' tab. Use the '3D data' checkbox to distinguish between measuring in 2D + time, 3D, and 3D + time, depending on your layer dimensions (2D to 4D). Once finished, a table displays the measurements, and a filter widget allows you to select objects matching a condition. The measurements are also displayed in the 'Plot'-tab for each layer for which you ran the region properties calculation. 
+
+![propfilter](https://github.com/user-attachments/assets/ab9c6b61-4366-4ad1-b813-7465aa183988)
+
 
 ## Contributing
 

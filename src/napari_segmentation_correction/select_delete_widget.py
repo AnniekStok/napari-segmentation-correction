@@ -68,7 +68,7 @@ class SelectDeleteMask(QWidget):
 
         self.image1_dropdown.layer_changed.connect(self._update_buttons)
         self.mask_dropdown.layer_changed.connect(self._update_buttons)
-        self._update_buttons()        
+        self._update_buttons()
 
         select_delete_box.setLayout(select_delete_box_layout)
         main_layout = QVBoxLayout()
@@ -78,10 +78,13 @@ class SelectDeleteMask(QWidget):
     def _update_buttons(self) -> None:
         """Update button state according to whether image layers are present"""
 
-        active = self.image1_dropdown.selected_layer is not None and self.mask_dropdown.selected_layer is not None
+        active = (
+            self.image1_dropdown.selected_layer is not None
+            and self.mask_dropdown.selected_layer is not None
+        )
         self.select_btn.setEnabled(active)
         self.delete_btn.setEnabled(active)
-        
+
     def _update_image1(self, selected_layer: str) -> None:
         """Update the layer that is set to be the 'source labels' layer for copying labels from."""
 
@@ -131,7 +134,6 @@ class SelectDeleteMask(QWidget):
             self.stack_checkbox.setCheckState(False)
 
     def select_labels(self):
-
         # check data dimensions first
         image_shape = self.image1_layer.data.shape
         mask_shape = self.mask_layer.data.shape
@@ -140,11 +142,13 @@ class SelectDeleteMask(QWidget):
             # apply mask to single time point or to full stack depending on checkbox state
             if self.stack_checkbox.isChecked():
                 # loop over all time points
-                print('applying the mask to all time points')
+                print("applying the mask to all time points")
                 # check if the data is a dask array
                 if isinstance(self.image1_layer.data, da.core.Array):
                     if self.outputdir is None:
-                        self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+                        self.outputdir = QFileDialog.getExistingDirectory(
+                            self, "Select Output Folder"
+                        )
 
                     outputdir = os.path.join(
                         self.outputdir,
@@ -162,7 +166,9 @@ class SelectDeleteMask(QWidget):
                         ].compute()  # Compute the current stack
 
                         to_keep = np.unique(current_stack[self.mask_layer.data > 0])
-                        filtered_mask = functools.reduce(np.logical_or, (current_stack == val for val in to_keep))
+                        filtered_mask = functools.reduce(
+                            np.logical_or, (current_stack == val for val in to_keep)
+                        )
                         filtered_data = np.where(filtered_mask, current_stack, 0)
 
                         tifffile.imwrite(
@@ -186,21 +192,31 @@ class SelectDeleteMask(QWidget):
                     self.image1_layer = self.viewer.add_labels(
                         da.stack([imread(fname) for fname in sorted(file_list)]),
                         name=self.image1_layer.name + "_filtered_labels",
-                        scale=self.image1_layer.scale
+                        scale=self.image1_layer.scale,
                     )
 
                 else:
                     for tp in range(self.image1_layer.data.shape[0]):
-                        to_keep = np.unique(self.image1_layer.data[tp][self.mask_layer.data > 0])
-                        filtered_mask = functools.reduce(np.logical_or, (self.image1_layer.data[tp] == val for val in to_keep))
-                        filtered_data_tp = np.where(filtered_mask, self.image1_layer.data[tp], 0)
+                        to_keep = np.unique(
+                            self.image1_layer.data[tp][self.mask_layer.data > 0]
+                        )
+                        filtered_mask = functools.reduce(
+                            np.logical_or,
+                            (self.image1_layer.data[tp] == val for val in to_keep),
+                        )
+                        filtered_data_tp = np.where(
+                            filtered_mask, self.image1_layer.data[tp], 0
+                        )
                         self.image1_layer.data[tp] = filtered_data_tp
 
             else:
                 tp = self.viewer.dims.current_step[0]
-                print('applying the mask to the current time point only', tp)
+                print("applying the mask to the current time point only", tp)
                 if isinstance(self.image1_layer.data, da.core.Array):
-                    outputdir = QFileDialog.getExistingDirectory(self, "Please select the directory that holds the images. Data will be changed here. Selecting a new empty directory will create a copy of all data")
+                    outputdir = QFileDialog.getExistingDirectory(
+                        self,
+                        "Please select the directory that holds the images. Data will be changed here. Selecting a new empty directory will create a copy of all data",
+                    )
 
                     if len(os.listdir(outputdir)) == 0:
                         for i in range(
@@ -211,9 +227,16 @@ class SelectDeleteMask(QWidget):
                             ].compute()  # Compute the current stack
 
                             if i == tp:
-                                to_keep = np.unique(current_stack[self.mask_layer.data > 0])
-                                filtered_mask = functools.reduce(np.logical_or, (current_stack == val for val in to_keep))
-                                current_stack = np.where(filtered_mask, current_stack, 0)
+                                to_keep = np.unique(
+                                    current_stack[self.mask_layer.data > 0]
+                                )
+                                filtered_mask = functools.reduce(
+                                    np.logical_or,
+                                    (current_stack == val for val in to_keep),
+                                )
+                                current_stack = np.where(
+                                    filtered_mask, current_stack, 0
+                                )
                             tifffile.imwrite(
                                 os.path.join(
                                     outputdir,
@@ -227,25 +250,31 @@ class SelectDeleteMask(QWidget):
                                 np.array(current_stack, dtype="uint16"),
                             )
 
-                            file_list = sorted([
-                                os.path.join(outputdir, fname)
-                                for fname in os.listdir(outputdir)
-                                if fname.endswith(".tif")
-                            ])
+                            file_list = sorted(
+                                [
+                                    os.path.join(outputdir, fname)
+                                    for fname in os.listdir(outputdir)
+                                    if fname.endswith(".tif")
+                                ]
+                            )
                     else:
                         current_stack = self.image1_layer.data[
                             tp
                         ].compute()  # Compute the current stack
 
                         to_keep = np.unique(current_stack[self.mask_layer.data > 0])
-                        filtered_mask = functools.reduce(np.logical_or, (current_stack == val for val in to_keep))
+                        filtered_mask = functools.reduce(
+                            np.logical_or, (current_stack == val for val in to_keep)
+                        )
                         current_stack = np.where(filtered_mask, current_stack, 0)
 
-                        file_list = sorted([
-                            os.path.join(outputdir, fname)
-                            for fname in os.listdir(outputdir)
-                            if fname.endswith(".tif")
-                        ])
+                        file_list = sorted(
+                            [
+                                os.path.join(outputdir, fname)
+                                for fname in os.listdir(outputdir)
+                                if fname.endswith(".tif")
+                            ]
+                        )
 
                         tifffile.imwrite(
                             file_list[tp],
@@ -255,20 +284,29 @@ class SelectDeleteMask(QWidget):
                     self.image1_layer = self.viewer.add_labels(
                         da.stack([imread(fname) for fname in file_list]),
                         name=self.image1_layer.name + "_filtered_labels",
-                        scale=self.image1_layer.scale
+                        scale=self.image1_layer.scale,
                     )
 
                 else:
                     tp = self.viewer.dims.current_step[0]
-                    to_keep = np.unique(self.image1_layer.data[tp][self.mask_layer.data > 0])
-                    filtered_mask = functools.reduce(np.logical_or, (self.image1_layer.data[tp] == val for val in to_keep))
-                    filtered_data_tp = np.where(filtered_mask, self.image1_layer.data[tp], 0)
+                    to_keep = np.unique(
+                        self.image1_layer.data[tp][self.mask_layer.data > 0]
+                    )
+                    filtered_mask = functools.reduce(
+                        np.logical_or,
+                        (self.image1_layer.data[tp] == val for val in to_keep),
+                    )
+                    filtered_data_tp = np.where(
+                        filtered_mask, self.image1_layer.data[tp], 0
+                    )
                     self.image1_layer.data[tp] = filtered_data_tp
 
         elif image_shape == mask_shape:
             if isinstance(self.image1_layer.data, da.core.Array):
                 if self.outputdir is None:
-                    self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+                    self.outputdir = QFileDialog.getExistingDirectory(
+                        self, "Select Output Folder"
+                    )
 
                 outputdir = os.path.join(
                     self.outputdir,
@@ -286,11 +324,15 @@ class SelectDeleteMask(QWidget):
                     ].compute()  # Compute the current stack
 
                     if isinstance(self.mask_layer.data, da.core.Array):
-                        to_keep = np.unique(current_stack[self.mask_layer.data[i].compute() > 0])
+                        to_keep = np.unique(
+                            current_stack[self.mask_layer.data[i].compute() > 0]
+                        )
                     else:
                         to_keep = np.unique(current_stack[self.mask_layer.data[i] > 0])
 
-                    filtered_mask = functools.reduce(np.logical_or, (current_stack == val for val in to_keep))
+                    filtered_mask = functools.reduce(
+                        np.logical_or, (current_stack == val for val in to_keep)
+                    )
                     filtered_data_tp = np.where(filtered_mask, current_stack, 0)
 
                     tifffile.imwrite(
@@ -314,14 +356,18 @@ class SelectDeleteMask(QWidget):
                 self.image1_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
                     name=self.image1_layer.name + "_filtered_labels",
-                    scale=self.image1_layer.scale
+                    scale=self.image1_layer.scale,
                 )
             else:
                 to_keep = np.unique(self.image1_layer.data[self.mask_layer.data > 0])
-                filtered_mask = functools.reduce(np.logical_or, (self.image1_layer.data==val for val in to_keep))
-                self.viewer.add_labels(np.where(filtered_mask, self.image1_layer.data, 0),
-                                       name="selected labels",
-                                       scale=self.image1_layer.scale)
+                filtered_mask = functools.reduce(
+                    np.logical_or, (self.image1_layer.data == val for val in to_keep)
+                )
+                self.viewer.add_labels(
+                    np.where(filtered_mask, self.image1_layer.data, 0),
+                    name="selected labels",
+                    scale=self.image1_layer.scale,
+                )
 
         else:
             msg = QMessageBox()
@@ -352,11 +398,13 @@ class SelectDeleteMask(QWidget):
             # apply mask to single time point or to full stack depending on checkbox state
             if self.stack_checkbox.isChecked():
                 # loop over all time points
-                print('applying the mask to all time points')
+                print("applying the mask to all time points")
                 # check if the data is a dask array
                 if isinstance(self.image1_layer.data, da.core.Array):
                     if self.outputdir is None:
-                        self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+                        self.outputdir = QFileDialog.getExistingDirectory(
+                            self, "Select Output Folder"
+                        )
 
                     outputdir = os.path.join(
                         self.outputdir,
@@ -397,20 +445,26 @@ class SelectDeleteMask(QWidget):
                     self.image1_layer = self.viewer.add_labels(
                         da.stack([imread(fname) for fname in sorted(file_list)]),
                         name=self.image1_layer.name + "_filtered_labels",
-                        scale=self.image1_layer.scale
+                        scale=self.image1_layer.scale,
                     )
 
                 else:
                     for tp in range(self.image1_layer.data.shape[0]):
-                        to_delete = np.unique(self.image1_layer.data[tp][self.mask_layer.data > 0])
+                        to_delete = np.unique(
+                            self.image1_layer.data[tp][self.mask_layer.data > 0]
+                        )
                         for label in to_delete:
-                            self.image1_layer.data[tp][self.image1_layer.data[tp] == label] = 0
+                            self.image1_layer.data[tp][
+                                self.image1_layer.data[tp] == label
+                            ] = 0
 
             else:
                 tp = self.viewer.dims.current_step[0]
-                print('applying the mask to the current time point only', tp)
                 if isinstance(self.image1_layer.data, da.core.Array):
-                    outputdir = QFileDialog.getExistingDirectory(self, "Please select the directory that holds the images. Data will be changed here. Selecting a new empty directory will create a copy of all data")
+                    outputdir = QFileDialog.getExistingDirectory(
+                        self,
+                        "Please select the directory that holds the images. Data will be changed here. Selecting a new empty directory will create a copy of all data",
+                    )
 
                     if len(os.listdir(outputdir)) == 0:
                         for i in range(
@@ -421,7 +475,9 @@ class SelectDeleteMask(QWidget):
                             ].compute()  # Compute the current stack
 
                             if i == tp:
-                                to_delete = np.unique(current_stack[self.mask_layer.data > 0])
+                                to_delete = np.unique(
+                                    current_stack[self.mask_layer.data > 0]
+                                )
                                 for label in to_delete:
                                     current_stack[current_stack == label] = 0
                             tifffile.imwrite(
@@ -437,11 +493,13 @@ class SelectDeleteMask(QWidget):
                                 np.array(current_stack, dtype="uint16"),
                             )
 
-                            file_list = sorted([
-                                os.path.join(outputdir, fname)
-                                for fname in os.listdir(outputdir)
-                                if fname.endswith(".tif")
-                            ])
+                            file_list = sorted(
+                                [
+                                    os.path.join(outputdir, fname)
+                                    for fname in os.listdir(outputdir)
+                                    if fname.endswith(".tif")
+                                ]
+                            )
                     else:
                         current_stack = self.image1_layer.data[
                             tp
@@ -450,11 +508,13 @@ class SelectDeleteMask(QWidget):
                         for label in to_delete:
                             current_stack[current_stack == label] = 0
 
-                        file_list = sorted([
-                            os.path.join(outputdir, fname)
-                            for fname in os.listdir(outputdir)
-                            if fname.endswith(".tif")
-                        ])
+                        file_list = sorted(
+                            [
+                                os.path.join(outputdir, fname)
+                                for fname in os.listdir(outputdir)
+                                if fname.endswith(".tif")
+                            ]
+                        )
 
                         tifffile.imwrite(
                             file_list[tp],
@@ -464,19 +524,25 @@ class SelectDeleteMask(QWidget):
                     self.image1_layer = self.viewer.add_labels(
                         da.stack([imread(fname) for fname in file_list]),
                         name=self.image1_layer.name + "_filtered_labels",
-                        scale=self.image1_layer.scale
+                        scale=self.image1_layer.scale,
                     )
 
                 else:
                     tp = self.viewer.dims.current_step[0]
-                    to_delete = np.unique(self.image1_layer.data[tp][self.mask_layer.data > 0])
+                    to_delete = np.unique(
+                        self.image1_layer.data[tp][self.mask_layer.data > 0]
+                    )
                     for label in to_delete:
-                        self.image1_layer.data[tp][self.image1_layer.data[tp] == label] = 0
+                        self.image1_layer.data[tp][
+                            self.image1_layer.data[tp] == label
+                        ] = 0
 
         elif image_shape == mask_shape:
             if isinstance(self.image1_layer.data, da.core.Array):
                 if self.outputdir is None:
-                    self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+                    self.outputdir = QFileDialog.getExistingDirectory(
+                        self, "Select Output Folder"
+                    )
 
                 outputdir = os.path.join(
                     self.outputdir,
@@ -517,13 +583,18 @@ class SelectDeleteMask(QWidget):
                 self.image1_layer = self.viewer.add_labels(
                     da.stack([imread(fname) for fname in sorted(file_list)]),
                     name=self.image1_layer.name + "_filtered_labels",
-                    scale=self.image1_layer.scale
+                    scale=self.image1_layer.scale,
                 )
             else:
                 to_delete = np.unique(self.image1_layer.data[self.mask_layer.data > 0])
-                selected_labels = self.viewer.add_labels(copy.deepcopy(self.image1_layer.data), name=self.image1_layer.name + "_filtered_labels", scale=self.image1_layer.scale)
+                selected_labels = copy.deepcopy(self.image1_layer.data)
                 for label in to_delete:
-                    selected_labels.data[selected_labels.data == label] = 0
+                    selected_labels[selected_labels == label] = 0
+                self.viewer.add_labels(
+                    selected_labels,
+                    name=self.image1_layer.name + "_filtered_labels",
+                    scale=self.image1_layer.scale,
+                )
 
         else:
             msg = QMessageBox()

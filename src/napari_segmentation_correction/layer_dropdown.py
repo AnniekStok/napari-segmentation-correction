@@ -53,7 +53,11 @@ class LayerDropdown(QComboBox):
     def _update_dropdown(self, event: Event | None = None) -> None:
         """Update the list of options in the dropdown menu whenever the list of layers is changed"""
 
-        if event is None or isinstance(event.value, self.layer_type):
+        if (
+            event is None
+            or not hasattr(event, "value")
+            or isinstance(event.value, self.layer_type)
+        ):
             selected_layer = self.currentText()
             self.clear()
             layers = [

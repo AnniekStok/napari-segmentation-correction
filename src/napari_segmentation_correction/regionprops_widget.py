@@ -61,6 +61,7 @@ class RegionPropsWidget(QWidget):
         self.z_scale.setMinimum(0.01)
         self.z_scale.setToolTip("Voxel size along Z axis")
         self.z_scale.setVisible(False)
+        self.z_scale.setDecimals(3)
 
         grid.addWidget(self.z_label, 1, 0)
         grid.addWidget(self.z_axis, 1, 1)
@@ -75,6 +76,7 @@ class RegionPropsWidget(QWidget):
         self.y_scale.setSingleStep(0.1)
         self.y_scale.setMinimum(0.01)
         self.y_scale.setToolTip("Voxel size along Y axis")
+        self.y_scale.setDecimals(3)
 
         grid.addWidget(self.y_label, 2, 0)
         grid.addWidget(self.y_axis, 2, 1)
@@ -89,6 +91,7 @@ class RegionPropsWidget(QWidget):
         self.x_scale.setSingleStep(0.1)
         self.x_scale.setMinimum(0.01)
         self.x_scale.setToolTip("Voxel size along X axis")
+        self.x_scale.setDecimals(3)
 
         grid.addWidget(self.x_label, 3, 0)
         grid.addWidget(self.x_axis, 3, 1)
@@ -330,6 +333,13 @@ class RegionPropsWidget(QWidget):
 
                 self.update_properties()
                 self.update_table()
+
+            self.z_scale.setValue(self.label_manager.selected_layer.scale[-3]) if len(
+                self.label_manager.selected_layer.scale
+            ) >= 3 else self.z_scale.setValue(1.0)
+            self.y_scale.setValue(self.label_manager.selected_layer.scale[-2])
+            self.x_scale.setValue(self.label_manager.selected_layer.scale[-1])
+
         else:
             self.measure_btn.setEnabled(False)
 
@@ -338,6 +348,23 @@ class RegionPropsWidget(QWidget):
             spacing = (self.z_scale.value(), self.y_scale.value(), self.x_scale.value())
         else:
             spacing = (self.y_scale.value(), self.x_scale.value())
+
+        # ensure spacing is applied to the layer and the viewer step is updated
+        layer_scale = list(self.label_manager.selected_layer.scale)
+        layer_scale[-1] = spacing[-1]
+        layer_scale[-2] = spacing[-2]
+        if len(layer_scale) > 3:
+            layer_scale[-3] = spacing[-3]
+        old_step = list(self.viewer.dims.current_step)
+        step_size = [dim_range.step for dim_range in self.viewer.dims.range]
+        new_step = [
+            step * step_size
+            for step, step_size in zip(old_step, step_size, strict=False)
+        ]
+        self.label_manager.selected_layer.scale = layer_scale
+        self.viewer.reset_view()
+        self.viewer.dims.current_step = new_step
+
         features = self.get_selected_features()
 
         if (

@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
 from .connected_components import ConnectedComponents
 from .erosion_dilation_widget import ErosionDilationWidget
 from .image_calculator import ImageCalculator
+from .label_boundaries import LabelBoundaries
 from .label_interpolator import InterpolationWidget
 from .layer_controls import LayerControlsWidget
 from .layer_manager import LayerManager
@@ -59,6 +60,10 @@ class AnnotateLabelsND(QWidget):
         ### Add widget for connected component labeling
         conn_comp_widget = ConnectedComponents(self.viewer, self.label_manager)
         self.edit_layout.addWidget(conn_comp_widget)
+
+        ### Add widget for label boundaries
+        label_boundary_widget = LabelBoundaries(self.viewer, self.label_manager)
+        self.edit_layout.addWidget(label_boundary_widget)
 
         ### Add widget for smoothing labels
         smooth_widget = SmoothingWidget(self.viewer, self.label_manager)

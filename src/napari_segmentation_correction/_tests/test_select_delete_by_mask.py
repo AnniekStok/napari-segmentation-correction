@@ -4,10 +4,10 @@ import dask.array as da
 import numpy as np
 import pytest
 
+from napari_segmentation_correction.process_actions_helpers import process_action
 from napari_segmentation_correction.select_delete_widget import (
     delete_labels_by_mask,
     filter_labels_by_mask,
-    process_action,
 )
 
 

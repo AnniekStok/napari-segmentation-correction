@@ -72,4 +72,5 @@ class LayerManager(QWidget):
                 current_stack = self._selected_layer.data[i].compute()
                 stack.append(current_stack)
             self._selected_layer.data = np.stack(stack, axis=0)
+            self.layer_update.emit()
             self.convert_to_array_btn.setEnabled(False)

@@ -1,13 +1,15 @@
 import copy
-import functools
 import os
-import shutil
 
 import dask.array as da
 import napari
 import numpy as np
 import tifffile
+from dask import delayed
 from napari.layers import Labels
+from napari_builtins.io._read import (
+    magic_imread,
+)
 from qtpy.QtWidgets import (
     QCheckBox,
     QFileDialog,
@@ -19,9 +21,180 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from skimage.io import imread
 
 from .layer_dropdown import LayerDropdown
+
+
+def filter_labels_by_mask(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Keep labels that touch the mask"""
+    to_keep = np.unique(image[mask > 0])
+    to_keep_mask = np.isin(image, to_keep)
+    image[~to_keep_mask] = 0
+
+    return image
+
+
+def delete_labels_by_mask(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Delete labels that touch the mask."""
+    to_delete = np.unique(image[mask > 0])
+    delete_mask = np.isin(image, to_delete)
+    image[delete_mask] = 0
+    return image
+
+
+def apply_action(image: np.ndarray, mask: np.ndarray, action) -> np.ndarray:
+    """
+    Apply an action to a single 2D/3D numpy array.
+    'action' is a callable like filter_labels_by_mask or delete_labels_by_mask.
+    """
+    return action(image, mask)
+
+
+def merge_modified_slices(
+    original: da.Array, modified: dict[int, np.ndarray]
+) -> da.Array:
+    """
+    Create a new dask array identical to `original` but with some slices
+    replaced by modified numpy arrays.
+
+    Args:
+        original (da.Array):
+            The input 3D or 4D array: (T, Z, Y, X) or (T, Y, X)
+        modified (dict[int, np.ndarray]):
+            Keys are indices along axis=0 that were modified.
+            Values are the modified numpy slices.
+
+    Returns
+        da.Array: A new lazily loaded array with patched slices.
+    """
+
+    slices = []
+
+    for i in range(original.shape[0]):
+        if i in modified:
+            # Modified slice: wrap as delayed object
+            arr = modified[i]
+            delayed_slice = delayed(lambda x: x)(arr)  # keep lazy
+            d = da.from_delayed(delayed_slice, shape=arr.shape, dtype=arr.dtype)
+
+        else:
+            # Unmodified: use original lazy dask slice
+            d = original[i, ...]
+
+        slices.append(d)
+
+    return da.stack(slices, axis=0)
+
+
+def process_action(
+    seg: np.ndarray | da.core.Array,
+    mask: np.ndarray | da.core.Array,
+    action: callable,
+    seg_index: int | list[int],
+    mask_index: int | list[int],
+    basename: str | None = None,
+    in_place: bool = False,
+) -> da.core.Array | np.ndarray:
+    """
+    Process a dask array segmentation with given mask and action.
+    If seg_index and mask_index are both provided, they should be iterables of the same length.
+    If only seg_index is provided, mask is assumed to be 2D/3D and applied to each seg slice.
+    Returns a dask array with processed data.
+    """
+
+    if isinstance(seg, np.ndarray) and not in_place:
+        seg = copy.deepcopy(seg)
+
+    if isinstance(seg, da.core.Array) and isinstance(seg_index, (list, range)):
+        outputdir = QFileDialog.getExistingDirectory(caption="Select Output Folder")
+        if not outputdir:
+            return
+
+        outputdir = os.path.join(
+            outputdir,
+            (basename + "_filtered_labels"),
+        )
+
+        while os.path.exists(outputdir):
+            outputdir = outputdir + "_1"
+        os.mkdir(outputdir)
+
+    # process single frame
+    if isinstance(seg_index, int):
+        if isinstance(seg, da.core.Array):
+            seg_frame = seg[seg_index].compute()
+            modified = {}
+        else:
+            seg_frame = seg[seg_index]
+
+        if isinstance(mask_index, int):
+            if isinstance(mask, da.core.Array):
+                mask_frame = mask[mask_index].compute()
+            else:
+                mask_frame = mask[mask_index]
+        else:
+            mask_frame = mask
+
+        processed = apply_action(seg_frame, mask_frame, action)
+
+        if isinstance(seg, da.core.Array):
+            modified[seg_index] = processed
+            # update dask array
+            return merge_modified_slices(seg, modified)
+        else:
+            seg[seg_index] = processed
+            return seg
+
+    # process all frames
+    elif isinstance(seg_index, (list, range)):
+        if isinstance(seg, da.core.Array):
+            # dask array
+            if mask_index is not None and isinstance(mask_index, (list, range)):
+                # both seg and mask are indexed
+                for i, j in zip(seg_index, mask_index, strict=True):
+                    seg_frame = seg[i].compute()
+                    if isinstance(mask, da.core.Array):
+                        mask_frame = mask[j].compute()
+                    else:
+                        mask_frame = mask[j]
+                    processed = apply_action(seg_frame, mask_frame, action)
+
+                    fname = f"{basename}{str(i).zfill(4)}.tif"
+                    path = os.path.join(outputdir, fname)
+
+                    tifffile.imwrite(path, processed)
+
+                return magic_imread(outputdir, use_dask=True)
+
+            else:
+                # only seg is indexed, mask is 2D/3D
+                for i in seg_index:
+                    seg_frame = seg[i].compute()
+                    processed = apply_action(seg_frame, mask, action)
+
+                    fname = f"{basename}{str(i).zfill(4)}.tif"
+                    path = os.path.join(outputdir, fname)
+
+                    tifffile.imwrite(path, processed)
+                return magic_imread(outputdir, use_dask=True)
+
+        else:
+            # numpy array
+            if mask_index is not None and isinstance(mask_index, (list, range)):
+                # both seg and mask are indexed
+                for i, j in zip(seg_index, mask_index, strict=True):
+                    seg_frame = seg[i]
+                    mask_frame = mask[j]
+                    processed = apply_action(seg_frame, mask_frame, action)
+                    seg[i] = processed
+                return seg
+            else:
+                # only seg is indexed, mask is 2D/3D
+                for i in seg_index:
+                    seg_frame = seg[i]
+                    processed = apply_action(seg_frame, mask, action)
+                    seg[i] = processed
+                return seg
 
 
 class SelectDeleteMask(QWidget):
@@ -56,14 +229,19 @@ class SelectDeleteMask(QWidget):
 
         self.stack_checkbox = QCheckBox("Apply 3D mask to all time points in 4D array")
         self.stack_checkbox.setEnabled(False)
-        select_delete_box_layout.addWidget(self.stack_checkbox)
+        self.edit_in_place = QCheckBox("Edit in place (no undo)")
+        self.edit_in_place.setEnabled(False)
+        options_layout = QHBoxLayout()
+        options_layout.addWidget(self.stack_checkbox)
+        options_layout.addWidget(self.edit_in_place)
+        select_delete_box_layout.addLayout(options_layout)
 
         self.select_btn = QPushButton("Select labels")
-        self.select_btn.clicked.connect(self.select_labels)
+        self.select_btn.clicked.connect(lambda: self.select_delete_labels(select=True))
         select_delete_box_layout.addWidget(self.select_btn)
 
         self.delete_btn = QPushButton("Delete labels")
-        self.delete_btn.clicked.connect(self.delete_labels)
+        self.delete_btn.clicked.connect(lambda: self.select_delete_labels(select=False))
         select_delete_box_layout.addWidget(self.delete_btn)
 
         self.image1_dropdown.layer_changed.connect(self._update_buttons)
@@ -103,6 +281,9 @@ class SelectDeleteMask(QWidget):
             else:
                 self.stack_checkbox.setEnabled(False)
                 self.stack_checkbox.setCheckState(False)
+            self.edit_in_place.setEnabled(True) if isinstance(
+                self.image1_layer.data, np.ndarray
+            ) else self.edit_in_place.setEnabled(False)
         else:
             self.select_btn.setEnabled(False)
             self.delete_btn.setEnabled(False)
@@ -133,468 +314,57 @@ class SelectDeleteMask(QWidget):
             self.stack_checkbox.setEnabled(False)
             self.stack_checkbox.setCheckState(False)
 
-    def select_labels(self):
-        # check data dimensions first
-        image_shape = self.image1_layer.data.shape
-        mask_shape = self.mask_layer.data.shape
-
-        if len(image_shape) == len(mask_shape) + 1 and image_shape[1:] == mask_shape:
-            # apply mask to single time point or to full stack depending on checkbox state
-            if self.stack_checkbox.isChecked():
-                # loop over all time points
-                print("applying the mask to all time points")
-                # check if the data is a dask array
-                if isinstance(self.image1_layer.data, da.core.Array):
-                    if self.outputdir is None:
-                        self.outputdir = QFileDialog.getExistingDirectory(
-                            self, "Select Output Folder"
-                        )
-
-                    outputdir = os.path.join(
-                        self.outputdir,
-                        (self.image1_layer.name + "_filtered_labels"),
-                    )
-                    if os.path.exists(outputdir):
-                        shutil.rmtree(outputdir)
-                    os.mkdir(outputdir)
-
-                    for i in range(
-                        self.image1_layer.data.shape[0]
-                    ):  # Loop over the first dimension
-                        current_stack = self.image1_layer.data[
-                            i
-                        ].compute()  # Compute the current stack
-
-                        to_keep = np.unique(current_stack[self.mask_layer.data > 0])
-                        filtered_mask = functools.reduce(
-                            np.logical_or, (current_stack == val for val in to_keep)
-                        )
-                        filtered_data = np.where(filtered_mask, current_stack, 0)
-
-                        tifffile.imwrite(
-                            os.path.join(
-                                outputdir,
-                                (
-                                    self.image1_layer.name
-                                    + "_filtered_labels_TP"
-                                    + str(i).zfill(4)
-                                    + ".tif"
-                                ),
-                            ),
-                            np.array(filtered_data, dtype="uint16"),
-                        )
-
-                    file_list = [
-                        os.path.join(outputdir, fname)
-                        for fname in os.listdir(outputdir)
-                        if fname.endswith(".tif")
-                    ]
-                    self.image1_layer = self.viewer.add_labels(
-                        da.stack([imread(fname) for fname in sorted(file_list)]),
-                        name=self.image1_layer.name + "_filtered_labels",
-                        scale=self.image1_layer.scale,
-                    )
-
-                else:
-                    for tp in range(self.image1_layer.data.shape[0]):
-                        to_keep = np.unique(
-                            self.image1_layer.data[tp][self.mask_layer.data > 0]
-                        )
-                        filtered_mask = functools.reduce(
-                            np.logical_or,
-                            (self.image1_layer.data[tp] == val for val in to_keep),
-                        )
-                        filtered_data_tp = np.where(
-                            filtered_mask, self.image1_layer.data[tp], 0
-                        )
-                        self.image1_layer.data[tp] = filtered_data_tp
-
-            else:
-                tp = self.viewer.dims.current_step[0]
-                print("applying the mask to the current time point only", tp)
-                if isinstance(self.image1_layer.data, da.core.Array):
-                    outputdir = QFileDialog.getExistingDirectory(
-                        self,
-                        "Please select the directory that holds the images. Data will be changed here. Selecting a new empty directory will create a copy of all data",
-                    )
-
-                    if len(os.listdir(outputdir)) == 0:
-                        for i in range(
-                            self.image1_layer.data.shape[0]
-                        ):  # Loop over the first dimension
-                            current_stack = self.image1_layer.data[
-                                i
-                            ].compute()  # Compute the current stack
-
-                            if i == tp:
-                                to_keep = np.unique(
-                                    current_stack[self.mask_layer.data > 0]
-                                )
-                                filtered_mask = functools.reduce(
-                                    np.logical_or,
-                                    (current_stack == val for val in to_keep),
-                                )
-                                current_stack = np.where(
-                                    filtered_mask, current_stack, 0
-                                )
-                            tifffile.imwrite(
-                                os.path.join(
-                                    outputdir,
-                                    (
-                                        self.image1_layer.name
-                                        + "_filtered_labels_TP"
-                                        + str(i).zfill(4)
-                                        + ".tif"
-                                    ),
-                                ),
-                                np.array(current_stack, dtype="uint16"),
-                            )
-
-                            file_list = sorted(
-                                [
-                                    os.path.join(outputdir, fname)
-                                    for fname in os.listdir(outputdir)
-                                    if fname.endswith(".tif")
-                                ]
-                            )
-                    else:
-                        current_stack = self.image1_layer.data[
-                            tp
-                        ].compute()  # Compute the current stack
-
-                        to_keep = np.unique(current_stack[self.mask_layer.data > 0])
-                        filtered_mask = functools.reduce(
-                            np.logical_or, (current_stack == val for val in to_keep)
-                        )
-                        current_stack = np.where(filtered_mask, current_stack, 0)
-
-                        file_list = sorted(
-                            [
-                                os.path.join(outputdir, fname)
-                                for fname in os.listdir(outputdir)
-                                if fname.endswith(".tif")
-                            ]
-                        )
-
-                        tifffile.imwrite(
-                            file_list[tp],
-                            np.array(current_stack, dtype="uint16"),
-                        )
-
-                    self.image1_layer = self.viewer.add_labels(
-                        da.stack([imread(fname) for fname in file_list]),
-                        name=self.image1_layer.name + "_filtered_labels",
-                        scale=self.image1_layer.scale,
-                    )
-
-                else:
-                    tp = self.viewer.dims.current_step[0]
-                    to_keep = np.unique(
-                        self.image1_layer.data[tp][self.mask_layer.data > 0]
-                    )
-                    filtered_mask = functools.reduce(
-                        np.logical_or,
-                        (self.image1_layer.data[tp] == val for val in to_keep),
-                    )
-                    filtered_data_tp = np.where(
-                        filtered_mask, self.image1_layer.data[tp], 0
-                    )
-                    self.image1_layer.data[tp] = filtered_data_tp
-
-        elif image_shape == mask_shape:
-            if isinstance(self.image1_layer.data, da.core.Array):
-                if self.outputdir is None:
-                    self.outputdir = QFileDialog.getExistingDirectory(
-                        self, "Select Output Folder"
-                    )
-
-                outputdir = os.path.join(
-                    self.outputdir,
-                    (self.image1_layer.name + "_filtered_labels"),
-                )
-                if os.path.exists(outputdir):
-                    shutil.rmtree(outputdir)
-                os.mkdir(outputdir)
-
-                for i in range(
-                    self.image1_layer.data.shape[0]
-                ):  # Loop over the first dimension
-                    current_stack = self.image1_layer.data[
-                        i
-                    ].compute()  # Compute the current stack
-
-                    if isinstance(self.mask_layer.data, da.core.Array):
-                        to_keep = np.unique(
-                            current_stack[self.mask_layer.data[i].compute() > 0]
-                        )
-                    else:
-                        to_keep = np.unique(current_stack[self.mask_layer.data[i] > 0])
-
-                    filtered_mask = functools.reduce(
-                        np.logical_or, (current_stack == val for val in to_keep)
-                    )
-                    filtered_data_tp = np.where(filtered_mask, current_stack, 0)
-
-                    tifffile.imwrite(
-                        os.path.join(
-                            outputdir,
-                            (
-                                self.image1_layer.name
-                                + "_filtered_labels_TP"
-                                + str(i).zfill(4)
-                                + ".tif"
-                            ),
-                        ),
-                        np.array(filtered_data_tp, dtype="uint16"),
-                    )
-
-                file_list = [
-                    os.path.join(outputdir, fname)
-                    for fname in os.listdir(outputdir)
-                    if fname.endswith(".tif")
-                ]
-                self.image1_layer = self.viewer.add_labels(
-                    da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.image1_layer.name + "_filtered_labels",
-                    scale=self.image1_layer.scale,
-                )
-            else:
-                to_keep = np.unique(self.image1_layer.data[self.mask_layer.data > 0])
-                filtered_mask = functools.reduce(
-                    np.logical_or, (self.image1_layer.data == val for val in to_keep)
-                )
-                self.viewer.add_labels(
-                    np.where(filtered_mask, self.image1_layer.data, 0),
-                    name="selected labels",
-                    scale=self.image1_layer.scale,
-                )
-
-        else:
-            msg = QMessageBox()
-            msg.setWindowTitle("Images do not have compatible shapes")
-            msg.setText("Please provide images that have matching dimensions")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-
-    def delete_labels(self):
+    def select_delete_labels(self, select: bool = True):
         """Delete labels that overlap with given mask. If the shape of the mask has 1 dimension less than the image, the mask will be applied to the current time point (index in the first dimension) of the image data."""
 
-        if isinstance(self.mask_layer.data, da.core.Array):
-            msg = QMessageBox()
-            msg.setWindowTitle("Please provide a mask that is not a Dask array")
-            msg.setText("Please provide a mask that is not a Dask array")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
-
         # check data dimensions first
         image_shape = self.image1_layer.data.shape
         mask_shape = self.mask_layer.data.shape
+
+        # define action
+        action = filter_labels_by_mask if select else delete_labels_by_mask
+
+        # change in place?
+        in_place = self.edit_in_place.isChecked() and self.edit_in_place.isEnabled()
 
         if len(image_shape) == len(mask_shape) + 1 and image_shape[1:] == mask_shape:
             # apply mask to single time point or to full stack depending on checkbox state
             if self.stack_checkbox.isChecked():
                 # loop over all time points
-                print("applying the mask to all time points")
-                # check if the data is a dask array
-                if isinstance(self.image1_layer.data, da.core.Array):
-                    if self.outputdir is None:
-                        self.outputdir = QFileDialog.getExistingDirectory(
-                            self, "Select Output Folder"
-                        )
-
-                    outputdir = os.path.join(
-                        self.outputdir,
-                        (self.image1_layer.name + "_filtered_labels"),
-                    )
-                    if os.path.exists(outputdir):
-                        shutil.rmtree(outputdir)
-                    os.mkdir(outputdir)
-
-                    for i in range(
-                        self.image1_layer.data.shape[0]
-                    ):  # Loop over the first dimension
-                        current_stack = self.image1_layer.data[
-                            i
-                        ].compute()  # Compute the current stack
-
-                        to_delete = np.unique(current_stack[self.mask_layer.data > 0])
-                        for label in to_delete:
-                            current_stack[current_stack == label] = 0
-                        tifffile.imwrite(
-                            os.path.join(
-                                outputdir,
-                                (
-                                    self.image1_layer.name
-                                    + "_filtered_labels_TP"
-                                    + str(i).zfill(4)
-                                    + ".tif"
-                                ),
-                            ),
-                            np.array(current_stack, dtype="uint16"),
-                        )
-
-                    file_list = [
-                        os.path.join(outputdir, fname)
-                        for fname in os.listdir(outputdir)
-                        if fname.endswith(".tif")
-                    ]
-                    self.image1_layer = self.viewer.add_labels(
-                        da.stack([imread(fname) for fname in sorted(file_list)]),
-                        name=self.image1_layer.name + "_filtered_labels",
-                        scale=self.image1_layer.scale,
-                    )
-
-                else:
-                    for tp in range(self.image1_layer.data.shape[0]):
-                        to_delete = np.unique(
-                            self.image1_layer.data[tp][self.mask_layer.data > 0]
-                        )
-                        for label in to_delete:
-                            self.image1_layer.data[tp][
-                                self.image1_layer.data[tp] == label
-                            ] = 0
+                indices = range(self.image1_layer.data.shape[0])
+                arr = process_action(
+                    seg=self.image1_layer.data,
+                    mask=self.mask_layer.data,
+                    seg_index=indices,
+                    mask_index=None,
+                    action=action,
+                    basename=self.image1_layer.name,
+                    in_place=in_place,
+                )
 
             else:
                 tp = self.viewer.dims.current_step[0]
-                if isinstance(self.image1_layer.data, da.core.Array):
-                    outputdir = QFileDialog.getExistingDirectory(
-                        self,
-                        "Please select the directory that holds the images. Data will be changed here. Selecting a new empty directory will create a copy of all data",
-                    )
-
-                    if len(os.listdir(outputdir)) == 0:
-                        for i in range(
-                            self.image1_layer.data.shape[0]
-                        ):  # Loop over the first dimension
-                            current_stack = self.image1_layer.data[
-                                i
-                            ].compute()  # Compute the current stack
-
-                            if i == tp:
-                                to_delete = np.unique(
-                                    current_stack[self.mask_layer.data > 0]
-                                )
-                                for label in to_delete:
-                                    current_stack[current_stack == label] = 0
-                            tifffile.imwrite(
-                                os.path.join(
-                                    outputdir,
-                                    (
-                                        self.image1_layer.name
-                                        + "_filtered_labels_TP"
-                                        + str(i).zfill(4)
-                                        + ".tif"
-                                    ),
-                                ),
-                                np.array(current_stack, dtype="uint16"),
-                            )
-
-                            file_list = sorted(
-                                [
-                                    os.path.join(outputdir, fname)
-                                    for fname in os.listdir(outputdir)
-                                    if fname.endswith(".tif")
-                                ]
-                            )
-                    else:
-                        current_stack = self.image1_layer.data[
-                            tp
-                        ].compute()  # Compute the current stack
-                        to_delete = np.unique(current_stack[self.mask_layer.data > 0])
-                        for label in to_delete:
-                            current_stack[current_stack == label] = 0
-
-                        file_list = sorted(
-                            [
-                                os.path.join(outputdir, fname)
-                                for fname in os.listdir(outputdir)
-                                if fname.endswith(".tif")
-                            ]
-                        )
-
-                        tifffile.imwrite(
-                            file_list[tp],
-                            np.array(current_stack, dtype="uint16"),
-                        )
-
-                    self.image1_layer = self.viewer.add_labels(
-                        da.stack([imread(fname) for fname in file_list]),
-                        name=self.image1_layer.name + "_filtered_labels",
-                        scale=self.image1_layer.scale,
-                    )
-
-                else:
-                    tp = self.viewer.dims.current_step[0]
-                    to_delete = np.unique(
-                        self.image1_layer.data[tp][self.mask_layer.data > 0]
-                    )
-                    for label in to_delete:
-                        self.image1_layer.data[tp][
-                            self.image1_layer.data[tp] == label
-                        ] = 0
+                arr = process_action(
+                    seg=self.image1_layer.data,
+                    mask=self.mask_layer.data,
+                    seg_index=tp,
+                    mask_index=None,
+                    action=action,
+                    basename=self.image1_layer.name,
+                    in_place=in_place,
+                )
 
         elif image_shape == mask_shape:
-            if isinstance(self.image1_layer.data, da.core.Array):
-                if self.outputdir is None:
-                    self.outputdir = QFileDialog.getExistingDirectory(
-                        self, "Select Output Folder"
-                    )
-
-                outputdir = os.path.join(
-                    self.outputdir,
-                    (self.image1_layer.name + "_filtered_labels"),
-                )
-                if os.path.exists(outputdir):
-                    shutil.rmtree(outputdir)
-                os.mkdir(outputdir)
-
-                for i in range(
-                    self.image1_layer.data.shape[0]
-                ):  # Loop over the first dimension
-                    current_stack = self.image1_layer.data[
-                        i
-                    ].compute()  # Compute the current stack
-
-                    to_delete = np.unique(current_stack[self.mask_layer.data[tp] > 0])
-                    for label in to_delete:
-                        current_stack[current_stack == label] = 0
-                    tifffile.imwrite(
-                        os.path.join(
-                            outputdir,
-                            (
-                                self.image1_layer.name
-                                + "_filtered_labels_TP"
-                                + str(i).zfill(4)
-                                + ".tif"
-                            ),
-                        ),
-                        np.array(current_stack, dtype="uint16"),
-                    )
-
-                file_list = [
-                    os.path.join(outputdir, fname)
-                    for fname in os.listdir(outputdir)
-                    if fname.endswith(".tif")
-                ]
-                self.image1_layer = self.viewer.add_labels(
-                    da.stack([imread(fname) for fname in sorted(file_list)]),
-                    name=self.image1_layer.name + "_filtered_labels",
-                    scale=self.image1_layer.scale,
-                )
-            else:
-                to_delete = np.unique(self.image1_layer.data[self.mask_layer.data > 0])
-                selected_labels = copy.deepcopy(self.image1_layer.data)
-                for label in to_delete:
-                    selected_labels[selected_labels == label] = 0
-                self.viewer.add_labels(
-                    selected_labels,
-                    name=self.image1_layer.name + "_filtered_labels",
-                    scale=self.image1_layer.scale,
-                )
+            indices = range(self.image1_layer.data.shape[0])
+            arr = process_action(
+                seg=self.image1_layer.data,
+                mask=self.mask_layer.data,
+                seg_index=indices,
+                mask_index=indices,
+                action=action,
+                basename=self.image1_layer.name,
+                in_place=in_place,
+            )
 
         else:
             msg = QMessageBox()
@@ -603,4 +373,13 @@ class SelectDeleteMask(QWidget):
             msg.setIcon(QMessageBox.Information)
             msg.setStandardButtons(QMessageBox.Ok)
             msg.exec_()
-            return False
+            return
+
+        if not in_place:
+            self.image1_layer = self.viewer.add_labels(
+                arr,
+                name=self.image1_layer.name + "_filtered_labels",
+                scale=self.image1_layer.scale,
+            )
+        else:
+            self.image1_layer.refresh()

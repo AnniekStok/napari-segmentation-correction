@@ -1,23 +1,29 @@
 import copy
-import os
-import shutil
 
-import dask.array as da
 import napari
 import numpy as np
 import pandas as pd
-import tifffile
 from qtpy.QtWidgets import (
-    QFileDialog,
     QGroupBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
-from skimage.io import imread
 from skimage.measure import label, regionprops_table
 
 from .layer_manager import LayerManager
+from .process_actions_helpers import process_action_seg
+
+
+def keep_largest_cluster(img: np.ndarray) -> np.ndarray:
+    """Keep the largest connected cluster of labels"""
+
+    mask = img > 0
+    labeled = label(mask)
+    props = np.bincount(labeled.flat)
+    props[0] = 0  # ignore background
+    largest_label = props.argmax()
+    return (labeled == largest_label) * img
 
 
 def keep_largest_fragment_per_label(img: np.ndarray) -> np.ndarray:
@@ -38,6 +44,12 @@ def keep_largest_fragment_per_label(img: np.ndarray) -> np.ndarray:
     out[~to_keep_mask] = 0
 
     return out
+
+
+def connected_component_labeling(img: np.ndarray) -> np.ndarray:
+    """Run connected components labeling"""
+
+    return label(img)
 
 
 class ConnectedComponents(QWidget):
@@ -106,215 +118,44 @@ class ConnectedComponents(QWidget):
     def _keep_largest_cluster(self):
         """Keep only the labels part of the largest non-zero connected component"""
 
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                self.outputdir = QFileDialog.getExistingDirectory(
-                    self, "Select Output Folder"
-                )
-
-            outputdir = os.path.join(
-                self.outputdir,
-                (self.label_manager.selected_layer.name + "_largest_cluster"),
-            )
-            if os.path.exists(outputdir):
-                shutil.rmtree(outputdir)
-            os.mkdir(outputdir)
-
-            for i in range(
-                self.label_manager.selected_layer.data.shape[0]
-            ):  # Loop over the first dimension
-                current_stack = self.label_manager.selected_layer.data[
-                    i
-                ].compute()  # Compute the current stack
-                mask = current_stack > 0
-                labeled = label(mask)
-                props = np.bincount(labeled.flat)
-                props[0] = 0  # ignore background
-                largest_label = props.argmax()
-                largest_cluster = (labeled == largest_label) * current_stack
-                tifffile.imwrite(
-                    os.path.join(
-                        outputdir,
-                        (
-                            self.label_manager.selected_layer.name
-                            + "_largest_cluster_TP"
-                            + str(i).zfill(4)
-                            + ".tif"
-                        ),
-                    ),
-                    np.array(largest_cluster, dtype="uint16"),
-                )
-
-            file_list = [
-                os.path.join(outputdir, fname)
-                for fname in os.listdir(outputdir)
-                if fname.endswith(".tif")
-            ]
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                da.stack([imread(fname) for fname in sorted(file_list)]),
-                name=self.label_manager.selected_layer.name + "_largest_cluster",
-                scale=self.label_manager.selected_layer.scale,
-            )
-        else:
-            shape = self.label_manager.selected_layer.data.shape
-            if len(shape) > 3:
-                largest_cluster = np.zeros_like(self.label_manager.selected_layer.data)
-                for i in range(shape[0]):
-                    mask = self.label_manager.selected_layer.data[i] > 0
-                    labeled = label(mask)
-                    props = np.bincount(labeled.flat)
-                    props[0] = 0  # ignore background
-                    largest_label = props.argmax()
-                    largest_cluster[i] = (
-                        labeled == largest_label
-                    ) * self.label_manager.selected_layer.data[i]
-
-            else:
-                mask = self.label_manager.selected_layer.data > 0
-                labeled = label(mask)
-                props = np.bincount(labeled.flat)
-                props[0] = 0  # ignore background
-                largest_label = props.argmax()
-                largest_cluster = (
-                    labeled == largest_label
-                ) * self.label_manager.selected_layer.data
-
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                largest_cluster,
-                name=self.label_manager.selected_layer.name + "_largest_cluster",
-                scale=self.label_manager.selected_layer.scale,
-            )
+        action = keep_largest_cluster
+        largest_cluster = process_action_seg(
+            self.label_manager.selected_layer.data,
+            action,
+            basename=self.label_manager.selected_layer.name,
+        )
+        self.label_manager.selected_layer = self.viewer.add_labels(
+            largest_cluster,
+            name=self.label_manager.selected_layer.name + "_largest_cluster",
+            scale=self.label_manager.selected_layer.scale,
+        )
 
     def _keep_largest_fragment(self):
         """Keep only the largest fragment per label"""
 
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                self.outputdir = QFileDialog.getExistingDirectory(
-                    self, "Select Output Folder"
-                )
-
-            outputdir = os.path.join(
-                self.outputdir,
-                (self.label_manager.selected_layer.name + "_largest_fragment"),
-            )
-            if os.path.exists(outputdir):
-                shutil.rmtree(outputdir)
-            os.mkdir(outputdir)
-
-            for i in range(
-                self.label_manager.selected_layer.data.shape[0]
-            ):  # Loop over the first dimension
-                current_stack = self.label_manager.selected_layer.data[
-                    i
-                ].compute()  # Compute the current stack
-
-                largest_fragments = keep_largest_fragment_per_label(current_stack)
-
-                tifffile.imwrite(
-                    os.path.join(
-                        outputdir,
-                        (
-                            self.label_manager.selected_layer.name
-                            + "_largest_fragments_TP"
-                            + str(i).zfill(4)
-                            + ".tif"
-                        ),
-                    ),
-                    largest_fragments,
-                )
-
-            file_list = [
-                os.path.join(outputdir, fname)
-                for fname in os.listdir(outputdir)
-                if fname.endswith(".tif")
-            ]
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                da.stack([imread(fname) for fname in sorted(file_list)]),
-                name=self.label_manager.selected_layer.name + "_largest_fragments",
-                scale=self.label_manager.selected_layer.scale,
-            )
-
-        else:
-            shape = self.label_manager.selected_layer.data.shape
-            if len(shape) > 3:
-                largest_fragments = np.zeros_like(
-                    self.label_manager.selected_layer.data
-                )
-                for i in range(shape[0]):
-                    largest_fragments[i] = keep_largest_fragment_per_label(
-                        self.label_manager.selected_layer.data[i]
-                    )
-            else:
-                largest_fragments = keep_largest_fragment_per_label(
-                    self.label_manager.selected_layer.data
-                )
-
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                largest_fragments,
-                name=self.label_manager.selected_layer.name + "_largest_fragments",
-                scale=self.label_manager.selected_layer.scale,
-            )
+        action = keep_largest_fragment_per_label
+        largest_frags = process_action_seg(
+            self.label_manager.selected_layer.data,
+            action,
+            basename=self.label_manager.selected_layer.name,
+        )
+        self.label_manager.selected_layer = self.viewer.add_labels(
+            largest_frags,
+            name=self.label_manager.selected_layer.name + "_largest_fragment_per_label",
+            scale=self.label_manager.selected_layer.scale,
+        )
 
     def _conn_comp(self):
         """Run connected component analysis to (re) label the labels array"""
 
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                self.outputdir = QFileDialog.getExistingDirectory(
-                    self, "Select Output Folder"
-                )
-
-            outputdir = os.path.join(
-                self.outputdir,
-                (self.label_manager.selected_layer.name + "_conncomp"),
-            )
-            if os.path.exists(outputdir):
-                shutil.rmtree(outputdir)
-            os.mkdir(outputdir)
-
-            for i in range(
-                self.label_manager.selected_layer.data.shape[0]
-            ):  # Loop over the first dimension
-                current_stack = self.label_manager.selected_layer.data[
-                    i
-                ].compute()  # Compute the current stack
-                relabeled = label(current_stack)
-                tifffile.imwrite(
-                    os.path.join(
-                        outputdir,
-                        (
-                            self.label_manager.selected_layer.name
-                            + "_conn_comp_TP"
-                            + str(i).zfill(4)
-                            + ".tif"
-                        ),
-                    ),
-                    np.array(relabeled, dtype="uint16"),
-                )
-
-            file_list = [
-                os.path.join(outputdir, fname)
-                for fname in os.listdir(outputdir)
-                if fname.endswith(".tif")
-            ]
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                da.stack([imread(fname) for fname in sorted(file_list)]),
-                name=self.label_manager.selected_layer.name + "_conn_comp",
-                scale=self.label_manager.selected_layer.scale,
-            )
-        else:
-            shape = self.label_manager.selected_layer.data.shape
-            if len(shape) > 3:
-                conn_comp = np.zeros_like(self.label_manager.selected_layer.data)
-                for i in range(shape[0]):
-                    conn_comp[i] = label(self.label_manager.selected_layer.data[i])
-
-            else:
-                conn_comp = label(self.label_manager.selected_layer.data)
-
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                conn_comp,
-                name=self.label_manager.selected_layer.name + "_conn_comp",
-                scale=self.label_manager.selected_layer.scale,
-            )
+        action = connected_component_labeling
+        largest_frags = process_action_seg(
+            self.label_manager.selected_layer.data,
+            action,
+            basename=self.label_manager.selected_layer.name,
+        )
+        self.label_manager.selected_layer = self.viewer.add_labels(
+            largest_frags,
+            name=self.label_manager.selected_layer.name + "_largest_fragment_per_label",
+            scale=self.label_manager.selected_layer.scale,
+        )

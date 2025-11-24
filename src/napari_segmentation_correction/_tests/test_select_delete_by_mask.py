@@ -46,11 +46,11 @@ def tmp_output(tmp_path):
 # NUMPY: SINGLE FRAME, NOT IN PLACE
 def test_numpy_single_not_inplace(small_seg_np, small_mask):
     out = process_action(
-        seg=small_seg_np,
-        mask=small_mask,
+        img1=small_seg_np,
+        img2=small_mask,
         action=delete_labels_by_mask,
-        seg_index=0,
-        mask_index=None,
+        img1_index=0,
+        img2_index=None,
         in_place=False,
     )
 
@@ -69,11 +69,11 @@ def test_numpy_single_not_inplace(small_seg_np, small_mask):
 def test_numpy_single_inplace(small_seg_np, small_mask):
     seg_copy = small_seg_np.copy()
     out = process_action(
-        seg=seg_copy,
-        mask=small_mask,
+        img1=seg_copy,
+        img2=small_mask,
         action=filter_labels_by_mask,
-        seg_index=1,
-        mask_index=None,
+        img1_index=1,
+        img2_index=None,
         in_place=True,
     )
 
@@ -91,11 +91,11 @@ def test_numpy_single_inplace(small_seg_np, small_mask):
 # NUMPY: MANY FRAMES, NOT IN PLACE
 def test_numpy_many_not_in_place(small_seg_np, small_mask):
     out = process_action(
-        seg=small_seg_np,
-        mask=small_mask,
+        img1=small_seg_np,
+        img2=small_mask,
         action=delete_labels_by_mask,
-        seg_index=range(3),
-        mask_index=None,
+        img1_index=range(3),
+        img2_index=None,
         in_place=False,
     )
     # All labels deleted
@@ -108,11 +108,11 @@ def test_numpy_many_not_in_place(small_seg_np, small_mask):
 def test_numpy_many_with_mask_index(small_seg_np, small_mask):
     masks = np.stack([small_mask, small_mask, small_mask])
     out = process_action(
-        seg=small_seg_np.copy(),
-        mask=masks,
+        img1=small_seg_np.copy(),
+        img2=masks,
         action=filter_labels_by_mask,
-        seg_index=[0, 1, 2],
-        mask_index=[0, 1, 2],
+        img1_index=[0, 1, 2],
+        img2_index=[0, 1, 2],
         in_place=False,
     )
     # Each frame keeps its labels
@@ -121,11 +121,11 @@ def test_numpy_many_with_mask_index(small_seg_np, small_mask):
     assert np.any(out[2] != 0)
 
     out = process_action(
-        seg=small_seg_np.copy(),
-        mask=masks,
+        img1=small_seg_np.copy(),
+        img2=masks,
         action=delete_labels_by_mask,
-        seg_index=[0, 1, 2],
-        mask_index=[0, 1, 2],
+        img1_index=[0, 1, 2],
+        img2_index=[0, 1, 2],
         in_place=False,
     )
     # Each frame has its labels deleted
@@ -143,11 +143,11 @@ def test_dask_single(tmp_output, small_seg_dask, small_mask, monkeypatch):
     )
 
     out = process_action(
-        seg=small_seg_dask,
-        mask=small_mask,
+        img1=small_seg_dask,
+        img2=small_mask,
         action=delete_labels_by_mask,
-        seg_index=1,
-        mask_index=None,
+        img1_index=1,
+        img2_index=None,
         basename="test",
         in_place=False,
     )
@@ -169,11 +169,11 @@ def test_dask_many(tmp_output, small_seg_dask, small_mask, monkeypatch):
     )
 
     out = process_action(
-        seg=small_seg_dask,
-        mask=small_mask,
+        img1=small_seg_dask,
+        img2=small_mask,
         action=delete_labels_by_mask,
-        seg_index=range(3),
-        mask_index=None,
+        img1_index=range(3),
+        img2_index=None,
         basename="test",
         in_place=False,
     )
@@ -196,11 +196,11 @@ def test_dask_many_with_mask_index(tmp_output, small_seg_dask, small_mask, monke
     )
 
     out = process_action(
-        seg=small_seg_dask,
-        mask=masks,
+        img1=small_seg_dask,
+        img2=masks,
         action=filter_labels_by_mask,
-        seg_index=[0, 1, 2],
-        mask_index=[0, 1, 2],
+        img1_index=[0, 1, 2],
+        img2_index=[0, 1, 2],
         basename="test",
         in_place=False,
     )
@@ -211,11 +211,11 @@ def test_dask_many_with_mask_index(tmp_output, small_seg_dask, small_mask, monke
     assert np.any(out[2].compute() != 0)
 
     out = process_action(
-        seg=small_seg_dask,
-        mask=masks,
+        img1=small_seg_dask,
+        img2=masks,
         action=delete_labels_by_mask,
-        seg_index=[0, 1, 2],
-        mask_index=[0, 1, 2],
+        img1_index=[0, 1, 2],
+        img2_index=[0, 1, 2],
         basename="test",
         in_place=False,
     )

@@ -13,7 +13,33 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from napari_segmentation_correction.process_actions_helpers import process_action
+
 from .layer_dropdown import LayerDropdown
+
+
+def add_images(img1: np.ndarray, img2: np.ndarray) -> np.ndarray:
+    return np.add(img1, img2)
+
+
+def subtract_images(img1: np.ndarray, img2: np.ndarray) -> np.ndarray:
+    return np.subtract(img1, img2)
+
+
+def multiply_images(img1: np.ndarray, img2: np.ndarray) -> np.ndarray:
+    return np.multiply(img1, img2)
+
+
+def divide_images(img1: np.ndarray, img2: np.ndarray) -> np.ndarray:
+    return np.divide(img1, img2, out=np.zeros_like(img1, dtype=float), where=img2 != 0)
+
+
+def logical_and(img1: np.ndarray, img2: np.ndarray) -> np.ndarray:
+    return np.logical_and(img1 != 0, img2 != 0).astype(int)
+
+
+def logical_or(img1: np.ndarray, img2: np.ndarray) -> np.ndarray:
+    return np.logical_or(img1 != 0, img2 != 0).astype(int)
 
 
 class ImageCalculator(QWidget):
@@ -57,9 +83,22 @@ class ImageCalculator(QWidget):
 
         add_images_btn = QPushButton("Run")
         add_images_btn.clicked.connect(self._calculate_images)
-        add_images_btn.setEnabled(self.image1_dropdown.selected_layer is not None and self.image2_dropdown.selected_layer is not None)
-        self.image1_dropdown.layer_changed.connect(lambda: add_images_btn.setEnabled(self.image1_dropdown.selected_layer is not None and self.image2_dropdown.selected_layer is not None))
-        self.image2_dropdown.layer_changed.connect(lambda: add_images_btn.setEnabled(self.image1_dropdown.selected_layer is not None and self.image2_dropdown.selected_layer is not None))
+        add_images_btn.setEnabled(
+            self.image1_dropdown.selected_layer is not None
+            and self.image2_dropdown.selected_layer is not None
+        )
+        self.image1_dropdown.layer_changed.connect(
+            lambda: add_images_btn.setEnabled(
+                self.image1_dropdown.selected_layer is not None
+                and self.image2_dropdown.selected_layer is not None
+            )
+        )
+        self.image2_dropdown.layer_changed.connect(
+            lambda: add_images_btn.setEnabled(
+                self.image1_dropdown.selected_layer is not None
+                and self.image2_dropdown.selected_layer is not None
+            )
+        )
 
         image_calc_box_layout.addWidget(add_images_btn)
 
@@ -69,7 +108,7 @@ class ImageCalculator(QWidget):
         self.setLayout(main_layout)
 
     def _update_image1(self, selected_layer: str) -> None:
-        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
+        """Update the layer for image 1"""
 
         if selected_layer == "":
             self.image1_layer = None
@@ -78,7 +117,7 @@ class ImageCalculator(QWidget):
             self.image1_dropdown.setCurrentText(selected_layer)
 
     def _update_image2(self, selected_layer: str) -> None:
-        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
+        """Update the layer for image 2"""
 
         if selected_layer == "":
             self.image2_layer = None
@@ -87,20 +126,8 @@ class ImageCalculator(QWidget):
             self.image2_dropdown.setCurrentText(selected_layer)
 
     def _calculate_images(self):
-        """Add label image 2 to label image 1"""
+        """Execute mathematical operations between two images."""
 
-        if isinstance(self.image1_layer, da.core.Array) or isinstance(
-            self.image2_layer, da.core.Array
-        ):
-            msg = QMessageBox()
-            msg.setWindowTitle(
-                "Cannot yet run image calculator on dask arrays"
-            )
-            msg.setText("Cannot yet run image calculator on dask arrays")
-            msg.setIcon(QMessageBox.Information)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return False
         if self.image1_layer.data.shape != self.image2_layer.data.shape:
             msg = QMessageBox()
             msg.setWindowTitle("Images must have the same shape")
@@ -108,44 +135,42 @@ class ImageCalculator(QWidget):
             msg.setIcon(QMessageBox.Information)
             msg.setStandardButtons(QMessageBox.Ok)
             msg.exec_()
-            return False
+            return
 
         if self.operation.currentText() == "Add":
-            self.viewer.add_image(
-                np.add(self.image1_layer.data, self.image2_layer.data),
-                scale = self.image1_layer.scale,
+            action = add_images
+        elif self.operation.currentText() == "Subtract":
+            action = subtract_images
+        elif self.operation.currentText() == "Multiply":
+            action = multiply_images
+        elif self.operation.currentText() == "Divide":
+            action = divide_images
+        elif self.operation.currentText() == "AND":
+            action = logical_and
+        elif self.operation.currentText() == "OR":
+            action = logical_or
+
+        if isinstance(self.image1_layer.data, da.core.Array) or isinstance(
+            self.image2_layer.data, da.core.Array
+        ):
+            indices = range(self.image1_layer.data.shape[0])
+            result = process_action(
+                self.image1_layer.data,
+                self.image2_layer.data,
+                action,
+                basename=self.image1_layer.name,
+                img1_index=indices,
+                img2_index=indices,
             )
-        if self.operation.currentText() == "Subtract":
-            self.viewer.add_image(
-                np.subtract(self.image1_layer.data, self.image2_layer.data),
-                scale = self.image1_layer.scale,
+        else:
+            result = process_action(
+                self.image1_layer.data,
+                self.image2_layer.data,
+                action,
+                basename=self.image1_layer.name,
             )
-        if self.operation.currentText() == "Multiply":
-            self.viewer.add_image(
-                np.multiply(self.image1_layer.data, self.image2_layer.data),
-                scale = self.image1_layer.scale,
-            )
-        if self.operation.currentText() == "Divide":
-            self.viewer.add_image(
-                np.divide(
-                    self.image1_layer.data,
-                    self.image2_layer.data,
-                    out=np.zeros_like(self.image1_layer.data, dtype=float),
-                    where=self.image2_layer.data != 0,
-                ),
-                scale = self.image1_layer.scale,
-            )
-        if self.operation.currentText() == "AND":
-            self.viewer.add_labels(
-                np.logical_and(
-                    self.image1_layer.data != 0, self.image2_layer.data != 0
-                ).astype(int),
-                scale = self.image1_layer.scale,
-            )
-        if self.operation.currentText() == "OR":
-            self.viewer.add_labels(
-                np.logical_or(
-                    self.image1_layer.data != 0, self.image2_layer.data != 0
-                ).astype(int),
-                scale = self.image1_layer.scale,
-            )
+        self.viewer.add_image(
+            result,
+            name=f"{self.image1_layer.name}_{self.image2_layer.name}_{self.operation.currentText()}",
+            scale=self.image1_layer.scale,
+        )

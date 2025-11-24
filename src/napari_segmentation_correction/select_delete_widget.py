@@ -169,10 +169,10 @@ class SelectDeleteMask(QWidget):
                 # loop over all time points
                 indices = range(self.image1_layer.data.shape[0])
                 arr = process_action(
-                    seg=self.image1_layer.data,
-                    mask=self.mask_layer.data,
-                    seg_index=indices,
-                    mask_index=None,
+                    img1=self.image1_layer.data,
+                    img2=self.mask_layer.data,
+                    img1_index=indices,
+                    img2_index=None,
                     action=action,
                     basename=self.image1_layer.name,
                     in_place=in_place,
@@ -181,10 +181,10 @@ class SelectDeleteMask(QWidget):
             else:
                 tp = self.viewer.dims.current_step[0]
                 arr = process_action(
-                    seg=self.image1_layer.data,
-                    mask=self.mask_layer.data,
-                    seg_index=tp,
-                    mask_index=None,
+                    img1=self.image1_layer.data,
+                    img2=self.mask_layer.data,
+                    img1_index=tp,
+                    img2_index=None,
                     action=action,
                     basename=self.image1_layer.name,
                     in_place=in_place,
@@ -193,10 +193,10 @@ class SelectDeleteMask(QWidget):
         elif image_shape == mask_shape:
             indices = range(self.image1_layer.data.shape[0])
             arr = process_action(
-                seg=self.image1_layer.data,
-                mask=self.mask_layer.data,
-                seg_index=indices,
-                mask_index=indices,
+                img1=self.image1_layer.data,
+                img2=self.mask_layer.data,
+                img1_index=indices,
+                img2_index=indices,
                 action=action,
                 basename=self.image1_layer.name,
                 in_place=in_place,

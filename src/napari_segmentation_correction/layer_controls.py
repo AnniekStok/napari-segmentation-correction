@@ -1,5 +1,6 @@
 import napari
 from napari_plane_sliders import PlaneSliderWidget
+from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QGroupBox,
     QVBoxLayout,
@@ -48,6 +49,8 @@ class LayerControlsWidget(QWidget):
         ### Add widget to save labels
         save_labels = SaveLabelsWidget(self.viewer, self.label_manager)
         layout.addWidget(save_labels)
+
+        layout.setAlignment(Qt.AlignTop)
 
         self.setLayout(layout)
 

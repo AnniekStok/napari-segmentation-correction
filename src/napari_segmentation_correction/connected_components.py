@@ -1,9 +1,11 @@
+import copy
 import os
 import shutil
 
 import dask.array as da
 import napari
 import numpy as np
+import pandas as pd
 import tifffile
 from qtpy.QtWidgets import (
     QFileDialog,
@@ -12,33 +14,28 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from scipy import ndimage
 from skimage.io import imread
-from skimage.measure import label
+from skimage.measure import label, regionprops_table
 
 from .layer_manager import LayerManager
 
 
-def keep_largest_fragment_per_label(img: np.ndarray, labels: list[int]) -> np.ndarray:
-    """Keep only the largest connected component per label in `labels`."""
-    out = np.zeros_like(img)
-    for label_value in labels:
-        if label_value == 0:
-            continue
-        mask = img == label_value
-        if not np.any(mask):
-            continue
+def keep_largest_fragment_per_label(img: np.ndarray) -> np.ndarray:
+    """Keep only the largest connected component per label."""
 
-        labeled, n = ndimage.label(mask)
-        if n == 0:
-            continue
-        if n == 1:
-            out[mask] = label_value
-            continue
-
-        sizes = np.bincount(labeled.ravel())[1:]  # skip background
-        largest_cc = 1 + np.argmax(sizes)  # component index (1-based)
-        out[labeled == largest_cc] = label_value
+    relabeled = label(img)
+    df = pd.DataFrame(
+        regionprops_table(
+            relabeled,
+            intensity_image=img,
+            properties=("label", "intensity_mean", "num_pixels"),
+        )
+    )
+    df_reduced = df.loc[df.groupby("intensity_mean")["num_pixels"].idxmax()]
+    remaining_labels = list(df_reduced["label"])
+    to_keep_mask = np.isin(relabeled, remaining_labels)
+    out = copy.deepcopy(img)
+    out[~to_keep_mask] = 0
 
     return out
 
@@ -212,10 +209,7 @@ class ConnectedComponents(QWidget):
                     i
                 ].compute()  # Compute the current stack
 
-                labels = np.unique(current_stack)
-                largest_fragments = keep_largest_fragment_per_label(
-                    current_stack, labels
-                )
+                largest_fragments = keep_largest_fragment_per_label(current_stack)
 
                 tifffile.imwrite(
                     os.path.join(
@@ -248,14 +242,12 @@ class ConnectedComponents(QWidget):
                     self.label_manager.selected_layer.data
                 )
                 for i in range(shape[0]):
-                    labels = np.unique(self.label_manager.selected_layer.data[i])
                     largest_fragments[i] = keep_largest_fragment_per_label(
-                        self.label_manager.selected_layer.data[i], labels
+                        self.label_manager.selected_layer.data[i]
                     )
             else:
-                labels = np.unique(self.label_manager.selected_layer.data)
                 largest_fragments = keep_largest_fragment_per_label(
-                    self.label_manager.selected_layer.data, labels
+                    self.label_manager.selected_layer.data
                 )
 
             self.label_manager.selected_layer = self.viewer.add_labels(

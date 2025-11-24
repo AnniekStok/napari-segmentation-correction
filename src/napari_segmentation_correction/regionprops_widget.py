@@ -5,11 +5,8 @@ import pandas as pd
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QCheckBox,
-    QDoubleSpinBox,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
-    QLabel,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -35,79 +32,10 @@ class RegionPropsWidget(QWidget):
 
         self.viewer = viewer
         self.label_manager = label_manager
-        self.label_manager.layer_update.connect(self.update_dims)
         self.table = None
         self.ndims = 2
         self.feature_dims = 2
         self.axis_widgets = []
-
-        dim_box = QGroupBox("Dimensions")
-        grid = QGridLayout()
-
-        # headers
-        grid.addWidget(QLabel("Axis"), 0, 0)
-        grid.addWidget(QLabel("Index"), 0, 1)
-        grid.addWidget(QLabel("Pixel scaling"), 0, 2)
-
-        # Z row
-        self.z_label = QLabel("Z")
-        self.z_label.setVisible(False)
-        self.z_axis = QLabel("0")
-        self.z_axis.setVisible(False)
-        self.axis_widgets.append(self.z_axis)
-        self.z_scale = QDoubleSpinBox()
-        self.z_scale.setValue(1.0)
-        self.z_scale.setSingleStep(0.1)
-        self.z_scale.setMinimum(0.01)
-        self.z_scale.setToolTip("Voxel size along Z axis")
-        self.z_scale.setVisible(False)
-        self.z_scale.setDecimals(3)
-
-        grid.addWidget(self.z_label, 1, 0)
-        grid.addWidget(self.z_axis, 1, 1)
-        grid.addWidget(self.z_scale, 1, 2)
-
-        # Y row
-        self.y_label = QLabel("Y")
-        self.y_axis = QLabel("1")
-        self.axis_widgets.append(self.y_axis)
-        self.y_scale = QDoubleSpinBox()
-        self.y_scale.setValue(1.0)
-        self.y_scale.setSingleStep(0.1)
-        self.y_scale.setMinimum(0.01)
-        self.y_scale.setToolTip("Voxel size along Y axis")
-        self.y_scale.setDecimals(3)
-
-        grid.addWidget(self.y_label, 2, 0)
-        grid.addWidget(self.y_axis, 2, 1)
-        grid.addWidget(self.y_scale, 2, 2)
-
-        # X row
-        self.x_label = QLabel("X")
-        self.x_axis = QLabel("2")
-        self.axis_widgets.append(self.x_axis)
-        self.x_scale = QDoubleSpinBox()
-        self.x_scale.setValue(1.0)
-        self.x_scale.setSingleStep(0.1)
-        self.x_scale.setMinimum(0.01)
-        self.x_scale.setToolTip("Voxel size along X axis")
-        self.x_scale.setDecimals(3)
-
-        grid.addWidget(self.x_label, 3, 0)
-        grid.addWidget(self.x_axis, 3, 1)
-        grid.addWidget(self.x_scale, 3, 2)
-
-        # add "use z" checkbox above grid
-        main_layout = QVBoxLayout()
-        self.use_z = QCheckBox("3D data (use Z axis)")
-        self.use_z.setVisible(False)
-        self.use_z.setEnabled(False)
-        self.use_z.stateChanged.connect(self.update_use_z)
-        main_layout.addWidget(self.use_z)
-        main_layout.addLayout(grid)
-
-        dim_box.setLayout(main_layout)
-        dim_box.setMaximumHeight(200)
 
         # features widget
         self.feature_properties = [
@@ -187,6 +115,7 @@ class RegionPropsWidget(QWidget):
         # Push button to measure features
         self.measure_btn = QPushButton("Measure properties")
         self.measure_btn.clicked.connect(self.measure)
+        self.measure_btn.setEnabled(False)
 
         ### Add widget for property filtering
         self.prop_filter_widget = PropertyFilterWidget(self.viewer, self.label_manager)
@@ -198,7 +127,6 @@ class RegionPropsWidget(QWidget):
         # Assemble layout
         main_box = QGroupBox("Region properties")
         main_layout = QVBoxLayout()
-        main_layout.addWidget(dim_box)
         main_layout.addWidget(feature_box)
         main_layout.addWidget(self.measure_btn)
         main_layout.addWidget(self.prop_filter_widget)
@@ -212,10 +140,28 @@ class RegionPropsWidget(QWidget):
 
         self.setLayout(layout)
 
-        # refresh dimensions based on current label layer, if any
-        self.update_dims()
+        # connect to update signal
+        self.label_manager.layer_update.connect(self.update_properties)
 
     def update_properties(self) -> None:
+        """Update the available properties based on the selected label layer dimensions"""
+
+        if self.label_manager.selected_layer is None:
+            self.measure_btn.setEnabled(False)
+            return
+        if (
+            self.label_manager.selected_layer is not None
+            and "dimension_info" in self.label_manager.selected_layer.metadata
+        ):
+            _, axes_labels, _ = self.label_manager.selected_layer.metadata[
+                "dimension_info"
+            ]
+            self.feature_dims = 3 if "Z" in axes_labels else 2
+        else:
+            self.feature_dims = 2
+
+        self.measure_btn.setEnabled(True)
+
         if hasattr(self, "intensity_image_dropdown") and self.intensity_image_dropdown:
             self.intensity_image_dropdown.layer_changed.disconnect()
             self.intensity_image_dropdown.deleteLater()
@@ -296,75 +242,19 @@ class RegionPropsWidget(QWidget):
                     )
                 )
 
-    def update_use_z(self, state: int) -> None:
-        self.z_label.setVisible(state == 2)
-        self.z_axis.setVisible(state == 2)
-        self.z_scale.setVisible(state == 2)
-        self.z_axis.setEnabled(state == 2)
-        self.z_scale.setEnabled(state == 2)
-        self.feature_dims = 3 if state == 2 else 2
-        self.update_dims()
-
-    def update_dims(self) -> None:
-        """Update the number of dimensions to measure based on the selected checkboxes"""
-
-        if self.label_manager.selected_layer is not None:
-            self.measure_btn.setEnabled(True)
-            self.ndims = self.label_manager.selected_layer.ndim
-            self.use_z.setVisible(self.ndims == 3)
-            self.use_z.setEnabled(self.ndims == 3)
-            if self.ndims == 4:
-                self.feature_dims = 3
-                self.z_axis.setVisible(True)
-                self.z_label.setVisible(True)
-                self.z_scale.setVisible(True)
-                self.z_axis.setEnabled(True)
-                self.z_scale.setEnabled(True)
-
-            ax_names = [str(ax) for ax in range(self.ndims)]
-            if len(ax_names) > 0:
-                for i, widget in enumerate(self.axis_widgets):
-                    if self.ndims == 4:
-                        widget.setText(ax_names[i + 1])
-                    elif self.ndims == 2:
-                        widget.setText(ax_names[i - 1])
-                    else:
-                        widget.setText(ax_names[i])
-
-                self.update_properties()
-                self.update_table()
-
-            self.z_scale.setValue(self.label_manager.selected_layer.scale[-3]) if len(
-                self.label_manager.selected_layer.scale
-            ) >= 3 else self.z_scale.setValue(1.0)
-            self.y_scale.setValue(self.label_manager.selected_layer.scale[-2])
-            self.x_scale.setValue(self.label_manager.selected_layer.scale[-1])
-
-        else:
-            self.measure_btn.setEnabled(False)
-
     def measure(self):
-        if self.use_z.isChecked() or self.ndims == 4:
-            spacing = (self.z_scale.value(), self.y_scale.value(), self.x_scale.value())
-        else:
-            spacing = (self.y_scale.value(), self.x_scale.value())
+        """Measure the selected region properties and update the table."""
 
-        # ensure spacing is applied to the layer and the viewer step is updated
-        layer_scale = list(self.label_manager.selected_layer.scale)
-        layer_scale[-1] = spacing[-1]
-        layer_scale[-2] = spacing[-2]
-        if len(layer_scale) > 3:
-            layer_scale[-3] = spacing[-3]
-        old_step = list(self.viewer.dims.current_step)
-        step_size = [dim_range.step for dim_range in self.viewer.dims.range]
-        new_step = [
-            step * step_size
-            for step, step_size in zip(old_step, step_size, strict=False)
+        _, axes_labels, spacing = self.label_manager.selected_layer.metadata[
+            "dimension_info"
         ]
-        self.label_manager.selected_layer.scale = layer_scale
-        self.viewer.reset_view()
-        self.viewer.dims.current_step = new_step
-
+        self.use_z = "Z" in axes_labels
+        self.ndims = len(axes_labels)
+        spacing = [
+            s
+            for s, label in zip(spacing, axes_labels, strict=False)
+            if label not in ("C", "T")
+        ]
         features = self.get_selected_features()
 
         if (
@@ -388,9 +278,7 @@ class RegionPropsWidget(QWidget):
             msg.setStandardButtons(QMessageBox.Ok)
             msg.exec_()
             return
-        if (self.use_z.isChecked() and self.ndims == 3) or (
-            not self.use_z.isChecked() and self.ndims == 2
-        ):
+        if (self.use_z and self.ndims == 3) or (not self.use_z and self.ndims == 2):
             props = calculate_extended_props(
                 data,
                 intensity_image=intensity_image,
@@ -424,6 +312,7 @@ class RegionPropsWidget(QWidget):
             self.update_table()
 
     def update_table(self) -> None:
+        """Update the regionprops table based on the selected label layer"""
         if self.table is not None:
             self.table.hide()
             self.prop_filter_widget.setVisible(False)

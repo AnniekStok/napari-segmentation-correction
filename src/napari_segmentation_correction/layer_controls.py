@@ -7,6 +7,7 @@ from qtpy.QtWidgets import (
 )
 
 from .copy_label_widget import CopyLabelWidget
+from .dimension_widget import DimensionWidget
 from .layer_manager import LayerManager
 from .save_labels_widget import SaveLabelsWidget
 
@@ -27,6 +28,11 @@ class LayerControlsWidget(QWidget):
         ### create the dropdown for selecting label images
         layout.addWidget(self.label_manager)
 
+        ### layer dimensions
+        self.dimension_widget = DimensionWidget(self.viewer)
+        self.dimension_widget.dims_updated.connect(self._update_dims)
+        layout.addWidget(self.dimension_widget)
+
         ### plane sliders
         plane_slider_box = QGroupBox("Plane Sliders")
         plane_slider_layout = QVBoxLayout()
@@ -44,3 +50,10 @@ class LayerControlsWidget(QWidget):
         layout.addWidget(save_labels)
 
         self.setLayout(layout)
+
+    def _update_dims(self) -> None:
+        """If the current layer is the selected labels layer, emit update signal to notify
+        the regionprops widget to update its properties."""
+
+        if self.dimension_widget.layer == self.label_manager.selected_layer:
+            self.label_manager.layer_update.emit()

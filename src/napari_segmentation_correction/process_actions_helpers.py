@@ -14,13 +14,17 @@ from qtpy.QtWidgets import (
 
 
 def apply_action(
-    image: np.ndarray, mask: np.ndarray | None, action: callable
+    image: np.ndarray, mask: np.ndarray | None, action: callable, **action_kwargs
 ) -> np.ndarray:
     """
     Apply an action to a single 2D/3D numpy array.
     'action' is a function that takes one or two inputs and returns the processed image.
     """
-    return action(image, mask) if mask is not None else action(image)
+    return (
+        action(image, mask, **action_kwargs)
+        if mask is not None
+        else action(image, **action_kwargs)
+    )
 
 
 def merge_modified_slices(
@@ -67,6 +71,7 @@ def process_action(
     mask_index: int | list[int],
     basename: str | None = None,
     in_place: bool = False,
+    **action_kwargs,
 ) -> da.core.Array | np.ndarray:
     """
     Process a dask array segmentation with given mask and action.
@@ -108,7 +113,7 @@ def process_action(
         else:
             mask_frame = mask
 
-        processed = apply_action(seg_frame, mask_frame, action)
+        processed = apply_action(seg_frame, mask_frame, action, **action_kwargs)
 
         if isinstance(seg, da.core.Array):
             modified[seg_index] = processed
@@ -130,7 +135,9 @@ def process_action(
                         mask_frame = mask[j].compute()
                     else:
                         mask_frame = mask[j]
-                    processed = apply_action(seg_frame, mask_frame, action)
+                    processed = apply_action(
+                        seg_frame, mask_frame, action, **action_kwargs
+                    )
 
                     fname = f"{basename}{str(i).zfill(4)}.tif"
                     path = os.path.join(outputdir, fname)
@@ -143,7 +150,7 @@ def process_action(
                 # only seg is indexed, mask is 2D/3D
                 for i in seg_index:
                     seg_frame = seg[i].compute()
-                    processed = apply_action(seg_frame, mask, action)
+                    processed = apply_action(seg_frame, mask, action, **action_kwargs)
 
                     fname = f"{basename}{str(i).zfill(4)}.tif"
                     path = os.path.join(outputdir, fname)
@@ -158,14 +165,16 @@ def process_action(
                 for i, j in zip(seg_index, mask_index, strict=True):
                     seg_frame = seg[i]
                     mask_frame = mask[j]
-                    processed = apply_action(seg_frame, mask_frame, action)
+                    processed = apply_action(
+                        seg_frame, mask_frame, action, **action_kwargs
+                    )
                     seg[i] = processed
                 return seg
             else:
                 # only seg is indexed, mask is 2D/3D
                 for i in seg_index:
                     seg_frame = seg[i]
-                    processed = apply_action(seg_frame, mask, action)
+                    processed = apply_action(seg_frame, mask, action, **action_kwargs)
                     seg[i] = processed
                 return seg
 
@@ -175,6 +184,7 @@ def process_action_seg(
     action: callable,
     basename: str | None = None,
     in_place: bool = False,
+    **action_kwargs,
 ) -> da.core.Array | np.ndarray:
     """
     Process a dask array segmentation with given mask and action.
@@ -202,7 +212,7 @@ def process_action_seg(
         # dask array, loop over frames
         for i in range(seg.shape[0]):
             seg_frame = seg[i].compute()
-            processed = apply_action(seg_frame, None, action)
+            processed = apply_action(seg_frame, None, action, **action_kwargs)
             fname = f"{basename}{str(i).zfill(4)}.tif"
             path = os.path.join(outputdir, fname)
             tifffile.imwrite(path, processed)
@@ -213,8 +223,8 @@ def process_action_seg(
             # loop over all frames if shape == 4
             for i in range(seg.shape[0]):
                 seg_frame = seg[i]
-                processed = apply_action(seg_frame, None, action)
+                processed = apply_action(seg_frame, None, action, **action_kwargs)
                 seg[i] = processed
             return seg
         else:
-            return apply_action(seg, None, action)
+            return apply_action(seg, None, action, **action_kwargs)

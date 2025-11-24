@@ -1,12 +1,6 @@
-import os
-import shutil
-
-import dask.array as da
 import napari
 import numpy as np
-import tifffile
 from qtpy.QtWidgets import (
-    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -17,10 +11,38 @@ from qtpy.QtWidgets import (
 )
 from scipy import ndimage
 from scipy.ndimage import binary_erosion
-from skimage.io import imread
 from skimage.segmentation import expand_labels
 
 from .layer_manager import LayerManager
+from .process_actions_helpers import process_action_seg
+
+
+def erode_labels(img: np.ndarray, diam: int, iterations: int) -> np.ndarray:
+    """Erode labels with provided diameter, for given number of iterations."""
+
+    structuring_element = (
+        np.ones((diam, diam), dtype=bool)
+        if img.ndim == 2
+        else np.ones((diam, diam, diam), dtype=bool)
+    )
+
+    mask = img > 0
+    filled_mask = ndimage.binary_fill_holes(mask)
+    eroded_mask = binary_erosion(
+        filled_mask,
+        structure=structuring_element,
+        iterations=iterations,
+    )
+    return np.where(eroded_mask, img, 0)
+
+
+def expand_labels_skimage(img: np.ndarray, diam: int, iterations: int) -> np.ndarray:
+    "Expand labels with given diameter, for given number of iterations."
+
+    for _j in range(iterations):
+        expanded_labels = expand_labels(img, distance=diam)
+
+    return expanded_labels
 
 
 class ErosionDilationWidget(QWidget):
@@ -96,107 +118,19 @@ class ErosionDilationWidget(QWidget):
 
         diam = self.structuring_element_diameter.value()
         iterations = self.iterations.value()
-
-        if self.label_manager.selected_layer.data.ndim == 2:
-            structuring_element = np.ones(
-                (diam, diam), dtype=bool
-            )  # Define a 3x3 structuring element for 2D erosion
-        else:
-            structuring_element = np.ones(
-                (diam, diam, diam), dtype=bool
-            )  # Define a 3x3x3 structuring element for 3D erosion
-
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                self.outputdir = QFileDialog.getExistingDirectory(
-                    self, "Select Output Folder"
-                )
-
-            outputdir = os.path.join(
-                self.outputdir,
-                (self.label_manager.selected_layer.name + "_eroded"),
-            )
-            if os.path.exists(outputdir):
-                shutil.rmtree(outputdir)
-            os.mkdir(outputdir)
-
-            for i in range(
-                self.label_manager.selected_layer.data.shape[0]
-            ):  # Loop over the first dimension
-                current_stack = self.label_manager.selected_layer.data[
-                    i
-                ].compute()  # Compute the current stack
-                mask = current_stack > 0
-                filled_mask = ndimage.binary_fill_holes(mask)
-                eroded_mask = binary_erosion(
-                    filled_mask,
-                    structure=structuring_element,
-                    iterations=iterations,
-                )
-                eroded = np.where(eroded_mask, current_stack, 0)
-                tifffile.imwrite(
-                    os.path.join(
-                        outputdir,
-                        (
-                            self.label_manager.selected_layer.name
-                            + "_eroded_TP"
-                            + str(i).zfill(4)
-                            + ".tif"
-                        ),
-                    ),
-                    np.array(eroded, dtype="uint16"),
-                )
-
-            file_list = [
-                os.path.join(outputdir, fname)
-                for fname in os.listdir(outputdir)
-                if fname.endswith(".tif")
-            ]
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                da.stack([imread(fname) for fname in sorted(file_list)]),
-                name=self.label_manager.selected_layer.name + "_eroded",
-                scale=self.label_manager.selected_layer.scale,
-            )
-
-        else:
-            if len(self.label_manager.selected_layer.data.shape) == 4:
-                stack = []
-                for i in range(self.label_manager.selected_layer.data.shape[0]):
-                    mask = self.label_manager.selected_layer.data[i] > 0
-                    filled_mask = ndimage.binary_fill_holes(mask)
-                    eroded_mask = binary_erosion(
-                        filled_mask,
-                        structure=structuring_element,
-                        iterations=iterations,
-                    )
-                    stack.append(
-                        np.where(
-                            eroded_mask,
-                            self.label_manager.selected_layer.data[i],
-                            0,
-                        )
-                    )
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    np.stack(stack, axis=0),
-                    name=self.label_manager.selected_layer.name + "_eroded",
-                    scale=self.label_manager.selected_layer.scale,
-                )
-
-            elif self.label_manager.selected_layer.data.ndim in (2, 3):
-                mask = self.label_manager.selected_layer.data > 0
-                filled_mask = ndimage.binary_fill_holes(mask)
-                eroded_mask = binary_erosion(
-                    filled_mask,
-                    structure=structuring_element,
-                    iterations=iterations,
-                )
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    np.where(eroded_mask, self.label_manager.selected_layer.data, 0),
-                    name=self.label_manager.selected_layer.name + "_eroded",
-                    scale=self.label_manager.selected_layer.scale,
-                )
-            else:
-                print("4D, 3D, or 2D array required!")
+        action = erode_labels
+        eroded = process_action_seg(
+            seg=self.label_manager.selected_layer.data,
+            action=action,
+            basename=self.label_manager.selected_layer.name,
+            diam=diam,
+            iterations=iterations,
+        )
+        self.label_manager.selected_layer = self.viewer.add_labels(
+            eroded,
+            name=self.label_manager.selected_layer.name + "_eroded",
+            scale=self.label_manager.selected_layer.scale,
+        )
 
     def _dilate_labels(self):
         """Dilate labels in the selected layer."""
@@ -204,75 +138,16 @@ class ErosionDilationWidget(QWidget):
         diam = self.structuring_element_diameter.value()
         iterations = self.iterations.value()
 
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                self.outputdir = QFileDialog.getExistingDirectory(
-                    self, "Select Output Folder"
-                )
-
-            outputdir = os.path.join(
-                self.outputdir,
-                (self.label_manager.selected_layer.name + "_dilated"),
-            )
-            if os.path.exists(outputdir):
-                shutil.rmtree(outputdir)
-            os.mkdir(outputdir)
-
-            for i in range(
-                self.label_manager.selected_layer.data.shape[0]
-            ):  # Loop over the first dimension
-                expanded_labels = self.label_manager.selected_layer.data[
-                    i
-                ].compute()  # Compute the current stack
-                for _j in range(iterations):
-                    expanded_labels = expand_labels(expanded_labels, distance=diam)
-                tifffile.imwrite(
-                    os.path.join(
-                        outputdir,
-                        (
-                            self.label_manager.selected_layer.name
-                            + "_dilated_TP"
-                            + str(i).zfill(4)
-                            + ".tif"
-                        ),
-                    ),
-                    np.array(expanded_labels, dtype="uint16"),
-                )
-
-            file_list = [
-                os.path.join(outputdir, fname)
-                for fname in os.listdir(outputdir)
-                if fname.endswith(".tif")
-            ]
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                da.stack([imread(fname) for fname in sorted(file_list)]),
-                name=self.label_manager.selected_layer.name + "_dilated",
-                scale=self.label_manager.selected_layer.scale,
-            )
-
-        else:
-            if len(self.label_manager.selected_layer.data.shape) == 4:
-                stack = []
-                for i in range(self.label_manager.selected_layer.data.shape[0]):
-                    expanded_labels = self.label_manager.selected_layer.data[i]
-                    for _j in range(iterations):
-                        expanded_labels = expand_labels(expanded_labels, distance=diam)
-                    stack.append(expanded_labels)
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    np.stack(stack, axis=0),
-                    name=self.label_manager.selected_layer.name + "_dilated",
-                    scale=self.label_manager.selected_layer.scale,
-                )
-
-            elif self.label_manager.selected_layer.data.ndim in (2, 3):
-                expanded_labels = self.label_manager.selected_layer.data
-                for _i in range(iterations):
-                    expanded_labels = expand_labels(expanded_labels, distance=diam)
-
-                self.label_manager.selected_layer = self.viewer.add_labels(
-                    expanded_labels,
-                    name=self.label_manager.selected_layer.name + "_dilated",
-                    scale=self.label_manager.selected_layer.scale,
-                )
-            else:
-                print("input should be a 2D, 3D or 4D label image.")
+        action = expand_labels_skimage
+        expanded = process_action_seg(
+            seg=self.label_manager.selected_layer.data,
+            action=action,
+            basename=self.label_manager.selected_layer.name,
+            diam=diam,
+            iterations=iterations,
+        )
+        self.label_manager.selected_layer = self.viewer.add_labels(
+            expanded,
+            name=self.label_manager.selected_layer.name + "_expanded",
+            scale=self.label_manager.selected_layer.scale,
+        )

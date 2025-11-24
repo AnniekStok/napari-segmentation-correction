@@ -149,13 +149,13 @@ class ConnectedComponents(QWidget):
         """Run connected component analysis to (re) label the labels array"""
 
         action = connected_component_labeling
-        largest_frags = process_action_seg(
+        conncomp = process_action_seg(
             self.label_manager.selected_layer.data,
             action,
             basename=self.label_manager.selected_layer.name,
         )
         self.label_manager.selected_layer = self.viewer.add_labels(
-            largest_frags,
-            name=self.label_manager.selected_layer.name + "_largest_fragment_per_label",
+            conncomp,
+            name=self.label_manager.selected_layer.name + "_conncomp",
             scale=self.label_manager.selected_layer.scale,
         )

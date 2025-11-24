@@ -91,7 +91,7 @@ class DimensionWidget(QWidget):
             ndim = layer.data.ndim
             axes_labels = ["C", "T", "Z", "Y", "X"]
             dims = range(ndim)
-            scale_info = [1.0] * ndim
+            scale_info = layer.scale
             offset = len(axes_labels) - ndim
 
         for d, label in enumerate(dims):

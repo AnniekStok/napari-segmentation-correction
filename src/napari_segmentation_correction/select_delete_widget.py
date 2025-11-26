@@ -21,7 +21,6 @@ def filter_labels_by_mask(image: np.ndarray, mask: np.ndarray) -> np.ndarray:
     to_keep = np.unique(image[mask > 0])
     to_keep_mask = np.isin(image, to_keep)
     image[~to_keep_mask] = 0
-
     return image
 
 
@@ -191,7 +190,14 @@ class SelectDeleteMask(QWidget):
                 )
 
         elif image_shape == mask_shape:
-            indices = range(self.image1_layer.data.shape[0])
+            indices = None
+            if "dimension_info" in self.image1_layer.metadata:
+                _, axes_labels, _ = self.image1_layer.metadata["dimension_info"]
+                # in the case the use explicitely set the time dimension, we use it to
+                # index
+                if "T" in axes_labels:
+                    indices = range(self.image1_layer.data.shape[0])
+
             arr = process_action(
                 img1=self.image1_layer.data,
                 img2=self.mask_layer.data,

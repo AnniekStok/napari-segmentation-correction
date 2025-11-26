@@ -21,6 +21,63 @@ from .layer_manager import LayerManager
 from .prop_filter_widget import PropertyFilterWidget
 from .regionprops_extended import calculate_extended_props
 
+feature_properties = [
+    {
+        "region_prop_name": "intensity_mean",
+        "display_name": "Mean intensity",
+        "enabled": False,
+        "dims": [2, 3],
+    },
+    {
+        "region_prop_name": "area",
+        "display_name": "Area",
+        "enabled": True,
+        "dims": [2],
+    },
+    {
+        "region_prop_name": "perimeter",
+        "display_name": "Perimeter",
+        "enabled": True,
+        "dims": [2],
+    },
+    {
+        "region_prop_name": "circularity",
+        "display_name": "Circularity",
+        "enabled": True,
+        "dims": [2],
+    },
+    {
+        "region_prop_name": "ellipse_axes",
+        "display_name": "Ellipse axes",
+        "enabled": True,
+        "dims": [2],
+    },
+    {
+        "region_prop_name": "volume",
+        "display_name": "Volume",
+        "enabled": True,
+        "dims": [3],
+    },
+    {
+        "region_prop_name": "surface_area",
+        "display_name": "Surface area",
+        "enabled": True,
+        "dims": [3],
+    },
+    {
+        "region_prop_name": "sphericity",
+        "display_name": "Sphericity",
+        "enabled": True,
+        "dims": [3],
+    },
+    {
+        "region_prop_name": "ellipsoid_axes",
+        "display_name": "Ellipsoid axes",
+        "enabled": True,
+        "dims": [3],
+    },
+]
+
 
 class RegionPropsWidget(QWidget):
     """Widget showing region props as a table and plot widget"""
@@ -37,84 +94,50 @@ class RegionPropsWidget(QWidget):
         self.feature_dims = 2
         self.axis_widgets = []
 
-        # features widget
-        self.feature_properties = [
-            {
-                "region_prop_name": "intensity_mean",
-                "display_name": "Mean intensity",
-                "enabled": False,
-                "selected": False,
-                "dims": [2, 3],
-            },
-            {
-                "region_prop_name": "area",
-                "display_name": "Area",
-                "enabled": True,
-                "selected": True,
-                "dims": [2],
-            },
-            {
-                "region_prop_name": "perimeter",
-                "display_name": "Perimeter",
-                "enabled": True,
-                "selected": False,
-                "dims": [2],
-            },
-            {
-                "region_prop_name": "circularity",
-                "display_name": "Circularity",
-                "enabled": True,
-                "selected": False,
-                "dims": [2],
-            },
-            {
-                "region_prop_name": "ellipse_axes",
-                "display_name": "Ellipse axes",
-                "enabled": True,
-                "selected": False,
-                "dims": [2],
-            },
-            {
-                "region_prop_name": "volume",
-                "display_name": "Volume",
-                "enabled": True,
-                "selected": True,
-                "dims": [3],
-            },
-            {
-                "region_prop_name": "surface_area",
-                "display_name": "Surface area",
-                "enabled": True,
-                "selected": False,
-                "dims": [3],
-            },
-            {
-                "region_prop_name": "sphericity",
-                "display_name": "Sphericity",
-                "enabled": True,
-                "selected": False,
-                "dims": [3],
-            },
-            {
-                "region_prop_name": "ellipsoid_axes",
-                "display_name": "Ellipsoid axes",
-                "enabled": True,
-                "selected": False,
-                "dims": [3],
-            },
-        ]
-
         feature_box = QGroupBox("Features to measure")
         feature_box.setMaximumHeight(250)
         self.checkbox_layout = QVBoxLayout()
         self.checkboxes = []
-        self.intensity_image_dropdown = None
+
+        for prop in feature_properties:
+            checkbox = QCheckBox(prop["display_name"])
+            checkbox.setEnabled(prop["enabled"])
+            checkbox.setStyleSheet("QCheckBox:disabled { color: grey }")
+            checkbox.stateChanged.connect(self._update_measure_btn_state)
+
+            self.checkboxes.append(
+                {"region_prop_name": prop["region_prop_name"], "checkbox": checkbox}
+            )
+
+            if prop["region_prop_name"] == "intensity_mean":
+                self.intensity_image_dropdown = LayerDropdown(
+                    self.viewer, (napari.layers.Image, napari.layers.Labels)
+                )
+                if self.intensity_image_dropdown.selected_layer is not None:
+                    checkbox.setEnabled(True)
+                int_layout = QHBoxLayout()
+                int_layout.addWidget(checkbox)
+                int_layout.addWidget(self.intensity_image_dropdown)
+                int_layout.setContentsMargins(0, 0, 0, 0)
+                int_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+                int_widget = QWidget()
+                int_widget.setLayout(int_layout)
+
+                # Enforce same height behavior as a normal checkbox
+                int_widget.setSizePolicy(checkbox.sizePolicy())
+                self.intensity_image_dropdown.setSizePolicy(
+                    QSizePolicy.Expanding, QSizePolicy.Fixed
+                )
+                self.checkbox_layout.addWidget(int_widget)
+            else:
+                self.checkbox_layout.addWidget(checkbox)
 
         feature_box.setLayout(self.checkbox_layout)
 
         # Push button to measure features
         self.measure_btn = QPushButton("Measure properties")
-        self.measure_btn.clicked.connect(self.measure)
+        self.measure_btn.clicked.connect(self._measure)
         self.measure_btn.setEnabled(False)
 
         ### Add widget for property filtering
@@ -141,14 +164,24 @@ class RegionPropsWidget(QWidget):
         self.setLayout(layout)
 
         # connect to update signal
-        self.label_manager.layer_update.connect(self.update_properties)
+        self.label_manager.layer_update.connect(self._update_properties)
+        self._update_properties()
 
-    def update_properties(self) -> None:
+    def _update_measure_btn_state(self, state: int | None = None):
+        """Update the button state according to whether at least one checkbox is checked"""
+
+        checked = [
+            ch["region_prop_name"]
+            for ch in self.checkboxes
+            if (ch["checkbox"].isChecked() and ch["checkbox"].isVisible())
+        ]
+        self.measure_btn.setEnabled(True) if len(
+            checked
+        ) > 0 else self.measure_btn.setEnabled(False)
+
+    def _update_properties(self) -> None:
         """Update the available properties based on the selected label layer dimensions"""
 
-        if self.label_manager.selected_layer is None:
-            self.measure_btn.setEnabled(False)
-            return
         if (
             self.label_manager.selected_layer is not None
             and "dimension_info" in self.label_manager.selected_layer.metadata
@@ -160,89 +193,40 @@ class RegionPropsWidget(QWidget):
         else:
             self.feature_dims = 2
 
-        self.measure_btn.setEnabled(True)
-
-        if hasattr(self, "intensity_image_dropdown") and self.intensity_image_dropdown:
-            self.intensity_image_dropdown.layer_changed.disconnect()
-            self.intensity_image_dropdown.deleteLater()
-        while self.checkbox_layout.count():
-            item = self.checkbox_layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
-        self.intensity_image_dropdown = None
-        self.checkboxes = []
-
-        # create checkbox for each feature
-        self.properties = [
-            f for f in self.feature_properties if self.feature_dims in f["dims"]
-        ]
-        self.checkbox_state = {
-            prop["region_prop_name"]: prop["selected"] for prop in self.properties
-        }
-        for prop in self.properties:
-            if self.feature_dims in prop["dims"]:
-                checkbox = QCheckBox(prop["display_name"])
-                checkbox.setEnabled(prop["enabled"])
-                checkbox.setStyleSheet("QCheckBox:disabled { color: grey }")
-                checkbox.setChecked(self.checkbox_state[prop["region_prop_name"]])
-                checkbox.stateChanged.connect(
-                    lambda state, prop=prop: self.checkbox_state.update(
-                        {prop["region_prop_name"]: state == 2}
-                    )
-                )
-                self.checkboxes.append(
-                    {"region_prop_name": prop["region_prop_name"], "checkbox": checkbox}
-                )
-
-                if prop["region_prop_name"] == "intensity_mean":
-                    self.intensity_image_dropdown = LayerDropdown(
-                        self.viewer, napari.layers.Image
-                    )
-                    self.intensity_image_dropdown.layer_changed.connect(
-                        self._update_intensity_checkbox
-                    )
-                    if self.intensity_image_dropdown.selected_layer is not None:
-                        checkbox.setEnabled(True)
-                    int_layout = QHBoxLayout()
-                    int_layout.addWidget(checkbox)
-                    int_layout.addWidget(self.intensity_image_dropdown)
-                    int_layout.setContentsMargins(0, 0, 0, 0)
-                    int_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-
-                    int_widget = QWidget()
-                    int_widget.setLayout(int_layout)
-
-                    # Enforce same height behavior as a normal checkbox
-                    int_widget.setSizePolicy(checkbox.sizePolicy())
-                    self.intensity_image_dropdown.setSizePolicy(
-                        QSizePolicy.Expanding, QSizePolicy.Fixed
-                    )
-
-                    self.checkbox_layout.addWidget(int_widget)
-                else:
-                    self.checkbox_layout.addWidget(checkbox)
-
-    def _update_intensity_checkbox(self) -> None:
-        """Enable or disable the intensity_mean checkbox based on the selected layer."""
-        if self.intensity_image_dropdown is not None:
-            checkbox = next(
-                (
-                    cb["checkbox"]
-                    for cb in self.checkboxes
-                    if cb["region_prop_name"] == "intensity_mean"
-                ),
-                None,
+        # Set the visibility of each checkbox according to the dimensions
+        visible_props = [
+            prop["region_prop_name"]
+            for prop in feature_properties
+            if (
+                self.feature_dims in prop["dims"]
+                and self.label_manager.selected_layer is not None
             )
-            if checkbox is not None:
-                checkbox.setEnabled(
-                    isinstance(
-                        self.intensity_image_dropdown.selected_layer,
-                        napari.layers.Image,
-                    )
-                )
+        ]
+        for checkbox_dict in self.checkboxes:
+            prop = checkbox_dict["region_prop_name"]
+            visible = prop in visible_props
+            checkbox_dict["checkbox"].setVisible(visible)
+            checkbox_dict["checkbox"].setEnabled(visible)
+        self.intensity_image_dropdown.setVisible(
+            False
+        ) if self.label_manager.selected_layer is None else self.intensity_image_dropdown.setVisible(
+            True
+        )
+        self._update_measure_btn_state()
 
-    def measure(self):
+    def _get_selected_features(self) -> list[str]:
+        """Return a list of the features that have been selected"""
+
+        selected_features = [
+            ch["region_prop_name"]
+            for ch in self.checkboxes
+            if (ch["checkbox"].isChecked() and ch["checkbox"].isVisible())
+        ]
+        selected_features.append("label")  # always include label
+        selected_features.append("centroid")
+        return selected_features
+
+    def _measure(self):
         """Measure the selected region properties and update the table."""
 
         _, axes_labels, spacing = self.label_manager.selected_layer.metadata[
@@ -255,13 +239,11 @@ class RegionPropsWidget(QWidget):
             for s, label in zip(spacing, axes_labels, strict=False)
             if label not in ("C", "T")
         ]
-        features = self.get_selected_features()
+        features = self._get_selected_features()
 
-        if (
-            isinstance(
-                self.intensity_image_dropdown.selected_layer, napari.layers.Image
-            )
-            and "intensity_mean" in features
+        if "intensity_mean" in features and isinstance(
+            self.intensity_image_dropdown.selected_layer,
+            napari.layers.Image | napari.layers.Labels,
         ):
             intensity_image = self.intensity_image_dropdown.selected_layer.data
         else:
@@ -309,9 +291,9 @@ class RegionPropsWidget(QWidget):
         if hasattr(self.label_manager.selected_layer, "properties"):
             self.label_manager.selected_layer.properties = props
             self.prop_filter_widget.set_properties()
-            self.update_table()
+            self._update_table()
 
-    def update_table(self) -> None:
+    def _update_table(self) -> None:
         """Update the regionprops table based on the selected label layer"""
         if self.table is not None:
             self.table.hide()
@@ -328,23 +310,3 @@ class RegionPropsWidget(QWidget):
             self.table.setMinimumWidth(500)
             self.regionprops_layout.addWidget(self.table)
             self.prop_filter_widget.setVisible(True)
-
-    def get_selected_features(self) -> list[str]:
-        """Return a list of the features that have been selected"""
-
-        selected_features = [
-            key for key in self.checkbox_state if self.checkbox_state[key]
-        ]
-        if "intensity_mean" in selected_features and not isinstance(
-            self.intensity_image_dropdown.selected_layer, napari.layers.Image
-        ):
-            selected_features.remove("intensity_mean")
-        selected_features.append("label")  # always include label
-        selected_features.append("centroid")
-        return selected_features
-
-    def set_selected_features(self, features: list[str]) -> None:
-        """Set the selected features based on the input list"""
-
-        for checkbox in self.checkboxes:
-            checkbox["checkbox"].setChecked(checkbox["region_prop_name"] in features)

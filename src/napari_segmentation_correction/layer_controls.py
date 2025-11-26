@@ -47,7 +47,7 @@ class LayerControlsWidget(QWidget):
         layout.addWidget(self.copy_label_widget)
 
         ### Add widget to save labels
-        save_labels = SaveLabelsWidget(self.viewer, self.label_manager)
+        save_labels = SaveLabelsWidget(self.viewer)
         layout.addWidget(save_labels)
 
         layout.setAlignment(Qt.AlignTop)

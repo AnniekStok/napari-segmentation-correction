@@ -62,8 +62,10 @@ class LabelBoundaries(QWidget):
             action,
             basename=self.label_manager.selected_layer.name,
         )
-        self.label_manager.selected_layer = self.viewer.add_labels(
-            boundaries,
-            name=self.label_manager.selected_layer.name + "_label_boundaries",
-            scale=self.label_manager.selected_layer.scale,
-        )
+
+        if boundaries is not None:
+            self.label_manager.selected_layer = self.viewer.add_labels(
+                boundaries,
+                name=self.label_manager.selected_layer.name + "_label_boundaries",
+                scale=self.label_manager.selected_layer.scale,
+            )

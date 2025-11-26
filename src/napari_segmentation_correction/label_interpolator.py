@@ -1,5 +1,4 @@
 import os
-import shutil
 
 import dask.array as da
 import napari
@@ -16,6 +15,7 @@ from scipy.ndimage import distance_transform_edt
 from skimage.io import imread
 
 from .layer_manager import LayerManager
+from .process_actions_helpers import remove_invalid_chars
 
 
 def signed_distance_transform(mask):
@@ -85,17 +85,18 @@ class InterpolationWidget(QWidget):
         """Interpolate between the nonzero pixels in the selected layer"""
 
         if isinstance(self.label_manager.selected_layer.data, da.core.Array):
-            if self.outputdir is None:
-                self.outputdir = QFileDialog.getExistingDirectory(
-                    self, "Select Output Folder"
-                )
+            outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+            if not outputdir:
+                return
 
             outputdir = os.path.join(
-                self.outputdir,
-                (self.label_manager.selected_layer.name + "_interpolated"),
+                outputdir,
+                remove_invalid_chars(
+                    self.label_manager.selected_layer.name + "_interpolated"
+                ),
             )
-            if os.path.exists(outputdir):
-                shutil.rmtree(outputdir)
+            while os.path.exists(outputdir):
+                outputdir = outputdir + "_1"
             os.mkdir(outputdir)
 
             in_memory_stack = []

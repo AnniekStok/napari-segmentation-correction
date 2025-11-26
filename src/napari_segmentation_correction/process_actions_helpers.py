@@ -191,7 +191,7 @@ def process_action(
 
 
 def process_action_seg(
-    img1: np.ndarray | da.core.Array,
+    seg: np.ndarray | da.core.Array,
     action: callable,
     basename: str | None = None,
     in_place: bool = False,
@@ -199,15 +199,15 @@ def process_action_seg(
 ) -> da.core.Array | np.ndarray:
     """
     Process a dask array segmentation with given img2 and action.
-    If img1_index and img2_index are both provided, they should be iterables of the same length.
-    If only img1_index is provided, img2 is assumed to be 2D/3D and applied to each img1 slice.
+    If seg_index and img2_index are both provided, they should be iterables of the same length.
+    If only seg_index is provided, img2 is assumed to be 2D/3D and applied to each seg slice.
     Returns a dask array with processed data.
     """
 
-    if isinstance(img1, np.ndarray) and not in_place:
-        img1 = copy.deepcopy(img1)
+    if isinstance(seg, np.ndarray) and not in_place:
+        seg = copy.deepcopy(seg)
 
-    if isinstance(img1, da.core.Array):
+    if isinstance(seg, da.core.Array):
         outputdir = QFileDialog.getExistingDirectory(caption="Select Output Folder")
         if not outputdir:
             return
@@ -222,23 +222,23 @@ def process_action_seg(
         os.mkdir(outputdir)
 
     # process all frames
-    if isinstance(img1, da.core.Array):
+    if isinstance(seg, da.core.Array):
         # dask array, loop over frames
-        for i in range(img1.shape[0]):
-            img1_frame = img1[i].compute()
-            processed = apply_action(img1_frame, None, action, **action_kwargs)
+        for i in range(seg.shape[0]):
+            seg_frame = seg[i].compute()
+            processed = apply_action(seg_frame, None, action, **action_kwargs)
             fname = remove_invalid_chars(f"{basename}{str(i).zfill(4)}.tif")
             path = os.path.join(outputdir, fname)
             tifffile.imwrite(path, processed)
         return magic_imread(outputdir, use_dask=True)
     else:
         # numpy array
-        if img1.ndim == 4:
+        if seg.ndim == 4:
             # loop over all frames if shape == 4
-            for i in range(img1.shape[0]):
-                img1_frame = img1[i]
-                processed = apply_action(img1_frame, None, action, **action_kwargs)
-                img1[i] = processed
-            return img1
+            for i in range(seg.shape[0]):
+                seg_frame = seg[i]
+                processed = apply_action(seg_frame, None, action, **action_kwargs)
+                seg[i] = processed
+            return seg
         else:
-            return apply_action(img1, None, action, **action_kwargs)
+            return apply_action(seg, None, action, **action_kwargs)

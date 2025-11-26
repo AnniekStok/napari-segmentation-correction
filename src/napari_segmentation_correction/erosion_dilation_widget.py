@@ -126,11 +126,13 @@ class ErosionDilationWidget(QWidget):
             diam=diam,
             iterations=iterations,
         )
-        self.label_manager.selected_layer = self.viewer.add_labels(
-            eroded,
-            name=self.label_manager.selected_layer.name + "_eroded",
-            scale=self.label_manager.selected_layer.scale,
-        )
+
+        if eroded is not None:
+            self.label_manager.selected_layer = self.viewer.add_labels(
+                eroded,
+                name=self.label_manager.selected_layer.name + "_eroded",
+                scale=self.label_manager.selected_layer.scale,
+            )
 
     def _dilate_labels(self):
         """Dilate labels in the selected layer."""
@@ -146,8 +148,10 @@ class ErosionDilationWidget(QWidget):
             diam=diam,
             iterations=iterations,
         )
-        self.label_manager.selected_layer = self.viewer.add_labels(
-            expanded,
-            name=self.label_manager.selected_layer.name + "_expanded",
-            scale=self.label_manager.selected_layer.scale,
-        )
+
+        if expanded is not None:
+            self.label_manager.selected_layer = self.viewer.add_labels(
+                expanded,
+                name=self.label_manager.selected_layer.name + "_expanded",
+                scale=self.label_manager.selected_layer.scale,
+            )

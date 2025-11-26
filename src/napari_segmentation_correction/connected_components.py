@@ -124,11 +124,13 @@ class ConnectedComponents(QWidget):
             action,
             basename=self.label_manager.selected_layer.name,
         )
-        self.label_manager.selected_layer = self.viewer.add_labels(
-            largest_cluster,
-            name=self.label_manager.selected_layer.name + "_largest_cluster",
-            scale=self.label_manager.selected_layer.scale,
-        )
+
+        if largest_cluster is not None:
+            self.label_manager.selected_layer = self.viewer.add_labels(
+                largest_cluster,
+                name=self.label_manager.selected_layer.name + "_largest_cluster",
+                scale=self.label_manager.selected_layer.scale,
+            )
 
     def _keep_largest_fragment(self):
         """Keep only the largest fragment per label"""
@@ -139,11 +141,14 @@ class ConnectedComponents(QWidget):
             action,
             basename=self.label_manager.selected_layer.name,
         )
-        self.label_manager.selected_layer = self.viewer.add_labels(
-            largest_frags,
-            name=self.label_manager.selected_layer.name + "_largest_fragment_per_label",
-            scale=self.label_manager.selected_layer.scale,
-        )
+
+        if largest_frags is not None:
+            self.label_manager.selected_layer = self.viewer.add_labels(
+                largest_frags,
+                name=self.label_manager.selected_layer.name
+                + "_largest_fragment_per_label",
+                scale=self.label_manager.selected_layer.scale,
+            )
 
     def _conn_comp(self):
         """Run connected component analysis to (re) label the labels array"""
@@ -154,8 +159,10 @@ class ConnectedComponents(QWidget):
             action,
             basename=self.label_manager.selected_layer.name,
         )
-        self.label_manager.selected_layer = self.viewer.add_labels(
-            conncomp,
-            name=self.label_manager.selected_layer.name + "_conncomp",
-            scale=self.label_manager.selected_layer.scale,
-        )
+
+        if conncomp is not None:
+            self.label_manager.selected_layer = self.viewer.add_labels(
+                conncomp,
+                name=self.label_manager.selected_layer.name + "_conncomp",
+                scale=self.label_manager.selected_layer.scale,
+            )

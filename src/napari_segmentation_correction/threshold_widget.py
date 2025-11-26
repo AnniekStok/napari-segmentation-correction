@@ -1,13 +1,7 @@
-import os
-import shutil
-
-import dask.array as da
 import napari
 import numpy as np
-import tifffile
 from napari.layers import Image, Labels
 from qtpy.QtWidgets import (
-    QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -16,9 +10,17 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from skimage.io import imread
 
 from .layer_dropdown import LayerDropdown
+from .process_actions_helpers import process_action_seg
+
+
+def threshold(
+    img: np.ndarray, min_val: int | float, max_val: int | float
+) -> np.ndarray:
+    """Threshold the input image"""
+
+    return (img >= min_val) & (img <= max_val)
 
 
 class ThresholdWidget(QWidget):
@@ -34,9 +36,7 @@ class ThresholdWidget(QWidget):
         threshold_box = QGroupBox("Threshold")
         threshold_box_layout = QVBoxLayout()
 
-        self.threshold_layer_dropdown = LayerDropdown(
-            self.viewer, (Image, Labels)
-        )
+        self.threshold_layer_dropdown = LayerDropdown(self.viewer, (Image, Labels))
         self.threshold_layer_dropdown.layer_changed.connect(
             self._update_threshold_layer
         )
@@ -60,9 +60,19 @@ class ThresholdWidget(QWidget):
         threshold_btn = QPushButton("Run")
         threshold_btn.clicked.connect(self._threshold)
 
-        threshold_btn.setEnabled(isinstance(self.threshold_layer_dropdown.selected_layer, napari.layers.Labels | napari.layers.Image))
+        threshold_btn.setEnabled(
+            isinstance(
+                self.threshold_layer_dropdown.selected_layer,
+                napari.layers.Labels | napari.layers.Image,
+            )
+        )
         self.threshold_layer_dropdown.layer_changed.connect(
-            lambda: threshold_btn.setEnabled(isinstance(self.threshold_layer_dropdown.selected_layer, napari.layers.Labels | napari.layers.Image))
+            lambda: threshold_btn.setEnabled(
+                isinstance(
+                    self.threshold_layer_dropdown.selected_layer,
+                    napari.layers.Labels | napari.layers.Image,
+                )
+            )
         )
 
         threshold_box_layout.addWidget(threshold_btn)
@@ -84,58 +94,17 @@ class ThresholdWidget(QWidget):
     def _threshold(self):
         """Threshold the selected label or intensity image"""
 
-        if isinstance(self.threshold_layer.data, da.core.Array):
-            if self.outputdir is None:
-                self.outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
-
-            outputdir = os.path.join(
-                self.outputdir,
-                (self.threshold_layer.name + "_threshold"),
-            )
-            if os.path.exists(outputdir):
-                shutil.rmtree(outputdir)
-            os.mkdir(outputdir)
-
-            for i in range(
-                self.threshold_layer.data.shape[0]
-            ):  # Loop over the first dimension
-                data = self.threshold_layer.data[
-                    i
-                ].compute()  # Compute the current stack
-
-                thresholded = (
-                    data >= int(self.min_threshold.value())
-                ) & (data <= int(self.max_threshold.value()))
-
-                tifffile.imwrite(
-                    os.path.join(
-                        outputdir,
-                        (
-                            self.threshold_layer.name
-                            + "_thresholded_TP"
-                            + str(i).zfill(4)
-                            + ".tif"
-                        ),
-                    ),
-                    np.array(thresholded, dtype="uint8"),
-                )
-
-            file_list = [
-                os.path.join(outputdir, fname)
-                for fname in os.listdir(outputdir)
-                if fname.endswith(".tif")
-            ]
+        action = threshold
+        mask = process_action_seg(
+            seg=self.threshold_layer.data,
+            action=action,
+            basename=self.threshold_layer.name,
+            min_val=self.min_threshold.value(),
+            max_val=self.max_threshold.value(),
+        )
+        if mask is not None:
             self.viewer.add_labels(
-                da.stack([imread(fname) for fname in sorted(file_list)]),
-                name=self.threshold_layer.name + "_thresholded",
-                scale=self.threshold_layer.scale
-            )
-
-        else:
-            thresholded = (
-                self.threshold_layer.data >= int(self.min_threshold.value())
-            ) & (self.threshold_layer.data <= int(self.max_threshold.value()))
-            self.viewer.add_labels(
-                thresholded, name=self.threshold_layer.name + "_thresholded",
-                scale=self.threshold_layer.scale
+                mask,
+                name=self.threshold_layer.name + "_threshold",
+                scale=self.threshold_layer.scale,
             )

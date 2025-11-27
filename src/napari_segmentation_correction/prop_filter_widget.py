@@ -218,10 +218,7 @@ class PropertyFilterWidget(QWidget):
                     filtered_labels = df.loc[df[prop] >= value, "label"]
 
                 labels = np.array(self.label_manager.selected_layer.data)
-                mask = functools.reduce(
-                    np.logical_or,
-                    (labels == val for val in filtered_labels),
-                )
+                mask = np.isin(labels, filtered_labels)
                 if keep_delete == "Delete":
                     result = np.where(~mask, labels, 0)
                 else:

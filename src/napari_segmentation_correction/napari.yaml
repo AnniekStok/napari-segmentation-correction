@@ -5,7 +5,7 @@ categories: ["Annotation", "Segmentation"]
 contributions:
   commands:
     - id: napari-segmentation-correction.annotateND
-      python_name: napari_segmentation_correction._widget:AnnotateLabelsND
+      python_name: napari_segmentation_correction.main_widget:LabelToolbox
       title: Manual Segmentation Correction
   widgets:
     - command: napari-segmentation-correction.annotateND

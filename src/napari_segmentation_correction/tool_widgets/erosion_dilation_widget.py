@@ -13,8 +13,12 @@ from scipy import ndimage
 from scipy.ndimage import binary_erosion
 from skimage.segmentation import expand_labels
 
-from .layer_manager import LayerManager
-from .process_actions_helpers import process_action_seg
+from napari_segmentation_correction.helpers.process_actions_helpers import (
+    process_action_seg,
+)
+from napari_segmentation_correction.layer_control_widgets.layer_manager import (
+    LayerManager,
+)
 
 
 def erode_labels(img: np.ndarray, diam: int, iterations: int) -> np.ndarray:

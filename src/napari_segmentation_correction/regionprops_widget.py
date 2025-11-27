@@ -15,12 +15,22 @@ from qtpy.QtWidgets import (
 )
 from tqdm import tqdm
 
-from .color_feature_widget import ColorFeatureWidget
-from .custom_table_widget import ColoredTableWidget
-from .layer_dropdown import LayerDropdown
-from .layer_manager import LayerManager
-from .prop_filter_widget import PropertyFilterWidget
-from .regionprops_extended import calculate_extended_props
+from napari_segmentation_correction.helpers.layer_dropdown import LayerDropdown
+from napari_segmentation_correction.layer_control_widgets.layer_manager import (
+    LayerManager,
+)
+from napari_segmentation_correction.regionprops.color_feature_widget import (
+    ColorFeatureWidget,
+)
+from napari_segmentation_correction.regionprops.custom_table_widget import (
+    ColoredTableWidget,
+)
+from napari_segmentation_correction.regionprops.prop_filter_widget import (
+    PropertyFilterWidget,
+)
+from napari_segmentation_correction.regionprops.regionprops_extended import (
+    calculate_extended_props,
+)
 
 
 def reorder_to_match(a: np.ndarray, b: np.ndarray) -> np.ndarray:

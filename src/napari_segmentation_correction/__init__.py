@@ -1,4 +1,4 @@
 __version__ = "0.0.1"
-from ._widget import AnnotateLabelsND
+from .main_widget import LabelToolbox
 
-__all__ = ("AnnotateLabelsND",)
+__all__ = ("LabelToolbox",)

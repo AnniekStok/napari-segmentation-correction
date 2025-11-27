@@ -12,22 +12,17 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .connected_components import ConnectedComponents
-from .erosion_dilation_widget import ErosionDilationWidget
-from .image_calculator import ImageCalculator
-from .label_boundaries import LabelBoundaries
-from .label_interpolator import InterpolationWidget
-from .layer_controls import LayerControlsWidget
-from .layer_manager import LayerManager
-from .plot_widget import PlotWidget
-from .regionprops_widget import RegionPropsWidget
-from .select_delete_widget import SelectDeleteMask
-from .smoothing_widget import SmoothingWidget
-from .threshold_widget import ThresholdWidget
+from napari_segmentation_correction.layer_control_widgets.layer_manager import (
+    LayerManager,
+)
+from napari_segmentation_correction.layer_controls import LayerControlsWidget
+from napari_segmentation_correction.plot_widget import PlotWidget
+from napari_segmentation_correction.regionprops_widget import RegionPropsWidget
+from napari_segmentation_correction.toolwidgets import ToolWidgets
 
 
-class AnnotateLabelsND(QWidget):
-    """Widget for manual correction of label data, for example to prepare ground truth data for training a segmentation model"""
+class LabelToolbox(QWidget):
+    """Collection of toolbox widgets that help to correct and analyze segmentation labels."""
 
     def __init__(self, viewer: "napari.viewer.Viewer") -> None:
         super().__init__()
@@ -36,7 +31,6 @@ class AnnotateLabelsND(QWidget):
         self.target_labels = None
         self.points = None
         self.copy_points = None
-        self.edit_layout = QVBoxLayout()
         self.tab_widget = QTabWidget(self)
         self.option_labels = None
 
@@ -57,54 +51,21 @@ class AnnotateLabelsND(QWidget):
         orth_view_manager = _get_manager(self.viewer)
         orth_view_manager.register_layer_hook(Labels, label_options_click_hook)
 
-        ### Add widget for connected component labeling
-        conn_comp_widget = ConnectedComponents(self.viewer, self.label_manager)
-        self.edit_layout.addWidget(conn_comp_widget)
-
-        ### Add widget for label boundaries
-        label_boundary_widget = LabelBoundaries(self.viewer, self.label_manager)
-        self.edit_layout.addWidget(label_boundary_widget)
-
-        ### Add widget for smoothing labels
-        smooth_widget = SmoothingWidget(self.viewer, self.label_manager)
-        self.edit_layout.addWidget(smooth_widget)
-
-        ### Add widget for eroding/dilating labels
-        erode_dilate_widget = ErosionDilationWidget(self.viewer, self.label_manager)
-        self.edit_layout.addWidget(erode_dilate_widget)
-
-        ### Threshold image
-        threshold_widget = ThresholdWidget(self.viewer)
-        self.edit_layout.addWidget(threshold_widget)
-
-        # Add image calculator
-        image_calc = ImageCalculator(self.viewer)
-        self.edit_layout.addWidget(image_calc)
-
-        # Add widget for selecting/deleting by mask
-        select_del = SelectDeleteMask(self.viewer)
-        self.edit_layout.addWidget(select_del)
-
-        # Add widget for interpolating masks
-        interpolation_widget = InterpolationWidget(self.viewer, self.label_manager)
-        self.edit_layout.addWidget(interpolation_widget)
-
         ### Add layer controls widget to tab
         controls_scroll_area = QScrollArea()
         controls_scroll_area.setWidget(self.layer_controls)
         controls_scroll_area.setWidgetResizable(True)
-        self.tab_widget.addTab(controls_scroll_area, "Layer Controls")
+        self.tab_widget.addTab(controls_scroll_area, "Extra Layer Controls")
         self.tab_widget.setCurrentIndex(1)
 
         ### add combined editing widgets widgets
-        self.edit_widgets = QWidget()
-        self.edit_widgets.setLayout(self.edit_layout)
+        self.edit_widgets = ToolWidgets(self.viewer, self.label_manager)
         scroll_area = QScrollArea()
         scroll_area.setWidget(self.edit_widgets)
         scroll_area.setWidgetResizable(True)
-        self.tab_widget.addTab(scroll_area, "Editing")
+        self.tab_widget.addTab(scroll_area, "Tools")
 
-        ### Add widget for reginproperties
+        ### Add widget for regionproperties
         self.regionprops_widget = RegionPropsWidget(self.viewer, self.label_manager)
         props_scroll_area = QScrollArea()
         props_scroll_area.setWidget(self.regionprops_widget)

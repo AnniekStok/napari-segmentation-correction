@@ -8,7 +8,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .layer_dropdown import LayerDropdown
+from napari_segmentation_correction.helpers.layer_dropdown import LayerDropdown
 
 
 class LayerManager(QWidget):

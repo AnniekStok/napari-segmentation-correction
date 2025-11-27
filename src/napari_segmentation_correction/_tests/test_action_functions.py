@@ -3,16 +3,20 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 
-from napari_segmentation_correction.connected_components import (
+from napari_segmentation_correction.helpers.process_actions_helpers import (
+    process_action,
+    process_action_seg,
+)
+from napari_segmentation_correction.tool_widgets.connected_components import (
     connected_component_labeling,
     keep_largest_cluster,
     keep_largest_fragment_per_label,
 )
-from napari_segmentation_correction.erosion_dilation_widget import (
+from napari_segmentation_correction.tool_widgets.erosion_dilation_widget import (
     erode_labels,
     expand_labels_skimage,
 )
-from napari_segmentation_correction.image_calculator import (
+from napari_segmentation_correction.tool_widgets.image_calculator import (
     add_images,
     divide_images,
     logical_and,
@@ -20,13 +24,11 @@ from napari_segmentation_correction.image_calculator import (
     multiply_images,
     subtract_images,
 )
-from napari_segmentation_correction.label_boundaries import compute_boundaries
-from napari_segmentation_correction.process_actions_helpers import (
-    process_action,
-    process_action_seg,
+from napari_segmentation_correction.tool_widgets.label_boundaries import (
+    compute_boundaries,
 )
-from napari_segmentation_correction.smoothing_widget import median_filter
-from napari_segmentation_correction.threshold_widget import threshold
+from napari_segmentation_correction.tool_widgets.smoothing_widget import median_filter
+from napari_segmentation_correction.tool_widgets.threshold_widget import threshold
 
 
 def test_threshold(img_2d, img_3d, img_4d, tmp_path):
@@ -63,7 +65,7 @@ def test_threshold(img_2d, img_3d, img_4d, tmp_path):
 
     img = img_4d(dask=True)
     with patch(
-        "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+        "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
     ) as mock_dialog:
         mock_dialog.return_value = str(tmp_path)
 
@@ -100,7 +102,7 @@ def test_median_filter(img_2d, img_3d, img_4d, tmp_path):
 
     img = img_4d(dask=True)
     with patch(
-        "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+        "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
     ) as mock_dialog:
         mock_dialog.return_value = str(tmp_path)
 
@@ -138,7 +140,7 @@ def test_erode_dilate(action, img_2d, img_3d, img_4d, tmp_path):
 
     img = img_4d(dask=True)
     with patch(
-        "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+        "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
     ) as mock_dialog:
         mock_dialog.return_value = str(tmp_path)
 
@@ -202,7 +204,7 @@ def test_conn_comp_boundaries(action, img_2d, img_3d, img_4d, tmp_path):
 
     img = img_4d(dask=True)
     with patch(
-        "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+        "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
     ) as mock_dialog:
         mock_dialog.return_value = str(tmp_path)
 
@@ -289,7 +291,7 @@ def test_image_calculator(action, adjust_dtype, img_2d, img_3d, img_4d, tmp_path
     img2 = np.rot90(img1)
     indices = range(img1.shape[0])
     with patch(
-        "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+        "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
     ) as mock_dialog:
         mock_dialog.return_value = str(tmp_path)
         result = process_action(
@@ -306,7 +308,7 @@ def test_image_calculator(action, adjust_dtype, img_2d, img_3d, img_4d, tmp_path
     img1 = img_4d(dask=True)
     indices = range(img1.shape[0])
     with patch(
-        "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+        "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
     ) as mock_dialog:
         mock_dialog.return_value = str(tmp_path)
         result = process_action(

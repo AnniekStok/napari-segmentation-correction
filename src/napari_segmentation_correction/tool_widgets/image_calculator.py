@@ -14,9 +14,10 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from napari_segmentation_correction.process_actions_helpers import process_action
-
-from .layer_dropdown import LayerDropdown
+from napari_segmentation_correction.helpers.layer_dropdown import LayerDropdown
+from napari_segmentation_correction.helpers.process_actions_helpers import (
+    process_action,
+)
 
 # List of available integer types in order
 _int_types = [

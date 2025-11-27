@@ -16,7 +16,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .layer_dropdown import LayerDropdown
+from napari_segmentation_correction.helpers.layer_dropdown import LayerDropdown
 
 
 def check_value_dtype(value, dtype):

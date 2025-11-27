@@ -11,8 +11,12 @@ from qtpy.QtWidgets import (
 )
 from scipy import ndimage
 
-from .layer_manager import LayerManager
-from .process_actions_helpers import process_action_seg
+from napari_segmentation_correction.helpers.process_actions_helpers import (
+    process_action_seg,
+)
+from napari_segmentation_correction.layer_control_widgets.layer_manager import (
+    LayerManager,
+)
 
 
 def median_filter(img: np.ndarray, size: int) -> np.ndarray:

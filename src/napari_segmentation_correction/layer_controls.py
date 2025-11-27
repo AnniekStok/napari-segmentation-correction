@@ -7,10 +7,18 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .copy_label_widget import CopyLabelWidget
-from .dimension_widget import DimensionWidget
-from .layer_manager import LayerManager
-from .save_labels_widget import SaveLabelsWidget
+from napari_segmentation_correction.layer_control_widgets.copy_label_widget import (
+    CopyLabelWidget,
+)
+from napari_segmentation_correction.layer_control_widgets.dimension_widget import (
+    DimensionWidget,
+)
+from napari_segmentation_correction.layer_control_widgets.layer_manager import (
+    LayerManager,
+)
+from napari_segmentation_correction.layer_control_widgets.save_labels_widget import (
+    SaveLabelsWidget,
+)
 
 
 class LayerControlsWidget(QWidget):

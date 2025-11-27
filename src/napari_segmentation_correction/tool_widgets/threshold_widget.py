@@ -11,8 +11,10 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from .layer_dropdown import LayerDropdown
-from .process_actions_helpers import process_action_seg
+from napari_segmentation_correction.helpers.layer_dropdown import LayerDropdown
+from napari_segmentation_correction.helpers.process_actions_helpers import (
+    process_action_seg,
+)
 
 
 def threshold(

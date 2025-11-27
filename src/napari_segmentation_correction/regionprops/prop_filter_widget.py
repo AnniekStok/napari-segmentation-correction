@@ -20,7 +20,9 @@ from qtpy.QtWidgets import (
 )
 from skimage.io import imread
 
-from .layer_manager import LayerManager
+from napari_segmentation_correction.layer_control_widgets.layer_manager import (
+    LayerManager,
+)
 
 
 class PropertyFilterWidget(QWidget):

@@ -2,7 +2,9 @@ import numpy as np
 import pytest
 from napari.layers import Labels
 
-from napari_segmentation_correction.copy_label_widget import CopyLabelWidget
+from napari_segmentation_correction.layer_control_widgets.copy_label_widget import (
+    CopyLabelWidget,
+)
 
 
 @pytest.fixture

@@ -11,7 +11,9 @@ from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from .layer_manager import LayerManager
+from napari_segmentation_correction.layer_control_widgets.layer_manager import (
+    LayerManager,
+)
 
 ICON_ROOT = Path(__file__).parent / "icons"
 

@@ -4,7 +4,7 @@ import dask.array as da
 import numpy as np
 from dask import delayed
 
-from napari_segmentation_correction.process_actions_helpers import (
+from napari_segmentation_correction.helpers.process_actions_helpers import (
     process_action,
     process_action_seg,
 )
@@ -71,7 +71,7 @@ class TestProcessActionSeg4D:
             delayed(img_np), shape=img_np.shape, dtype=img_np.dtype
         )
         with patch(
-            "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+            "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
         ) as mock_dialog:
             mock_dialog.return_value = str(tmp_path)
             result = process_action_seg(
@@ -87,7 +87,7 @@ class TestProcessActionSeg4D:
         )
 
         with patch(
-            "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+            "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
         ) as mock_dialog:
             mock_dialog.return_value = str(tmp_path)
             result = process_action_seg(
@@ -122,7 +122,7 @@ class TestProcessAction2D:
 
         # Mock QFileDialog to return tmp_path instead of blocking
         with patch(
-            "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+            "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
         ) as mock_dialog:
             mock_dialog.return_value = str(tmp_path)
             result = process_action(
@@ -193,7 +193,7 @@ class TestProcessAction3D:
 
         # Mock QFileDialog to return tmp_path instead of blocking
         with patch(
-            "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+            "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
         ) as mock_dialog:
             mock_dialog.return_value = str(tmp_path)
             result = process_action(
@@ -262,7 +262,7 @@ class TestProcessAction4D:
         mask = np.ones((4, 4), dtype=np.uint8)
 
         with patch(
-            "napari_segmentation_correction.process_actions_helpers.QFileDialog.getExistingDirectory"
+            "napari_segmentation_correction.helpers.process_actions_helpers.QFileDialog.getExistingDirectory"
         ) as mock_dialog:
             mock_dialog.return_value = str(tmp_path)
             result = process_action(

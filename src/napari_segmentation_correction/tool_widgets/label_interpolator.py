@@ -14,8 +14,12 @@ from qtpy.QtWidgets import (
 from scipy.ndimage import distance_transform_edt
 from skimage.io import imread
 
-from .layer_manager import LayerManager
-from .process_actions_helpers import remove_invalid_chars
+from napari_segmentation_correction.helpers.process_actions_helpers import (
+    remove_invalid_chars,
+)
+from napari_segmentation_correction.layer_control_widgets.layer_manager import (
+    LayerManager,
+)
 
 
 def signed_distance_transform(mask):

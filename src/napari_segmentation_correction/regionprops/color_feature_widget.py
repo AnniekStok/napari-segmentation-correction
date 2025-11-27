@@ -9,7 +9,9 @@ from qtpy.QtWidgets import (
 )
 from skimage.util import map_array
 
-from .layer_manager import LayerManager
+from napari_segmentation_correction.layer_control_widgets.layer_manager import (
+    LayerManager,
+)
 
 
 class ColorFeatureWidget(QWidget):

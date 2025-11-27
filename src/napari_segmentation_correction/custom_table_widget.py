@@ -1,10 +1,12 @@
 import napari
 import pandas as pd
 from matplotlib.colors import to_rgb
+from qtpy.QtCore import QModelIndex, Qt
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
+    QLabel,
     QPushButton,
     QStyledItemDelegate,
     QTableWidget,
@@ -30,6 +32,17 @@ class FloatDelegate(QStyledItemDelegate):
         return f"{number:.{self.nDecimals}f}"
 
 
+class CustomTableWidget(QTableWidget):
+    def mousePressEvent(self, event):
+        index = self.indexAt(event.pos())
+        if index.isValid():
+            right = event.button() == Qt.RightButton
+            self.parent()._clicked_table(right=right, index=index)
+
+        # Call super so selection behavior still works
+        super().mousePressEvent(event)
+
+
 class ColoredTableWidget(QWidget):
     """Customized table widget with colored rows based on label colors in a napari Labels layer"""
 
@@ -38,7 +51,7 @@ class ColoredTableWidget(QWidget):
 
         self._layer = layer
         self._viewer = viewer
-        self._table_widget = QTableWidget()
+        self._table_widget = CustomTableWidget()
 
         self._layer.events.colormap.connect(self._set_label_colors_to_rows)
         if hasattr(layer, "properties"):
@@ -47,11 +60,17 @@ class ColoredTableWidget(QWidget):
             self._set_data({})
         self.ascending = False  # for choosing whether to sort ascending or descending
 
-        # Reconnect the clicked signal to your custom method.
-        self._table_widget.clicked.connect(self._clicked_table)
-
         # Connect to single click in the header to sort the table.
         self._table_widget.horizontalHeader().sectionClicked.connect(self._sort_table)
+
+        # Instruction label to explain left and right mouse click.
+        label = QLabel(
+            "Use left mouse click to select and center a label, use right mouse click to show the selected label only."
+        )
+        label.setWordWrap(True)
+        font = label.font()
+        font.setItalic(True)
+        label.setFont(font)
 
         copy_button = QPushButton("Copy to clipboard")
         copy_button.clicked.connect(self._copy_table)
@@ -64,6 +83,7 @@ class ColoredTableWidget(QWidget):
         button_layout.addWidget(save_button)
         main_layout = QVBoxLayout()
         main_layout.addLayout(button_layout)
+        main_layout.addWidget(label)
         main_layout.addWidget(self._table_widget)
         self.setLayout(main_layout)
         self.setMinimumHeight(300)
@@ -113,21 +133,25 @@ class ColoredTableWidget(QWidget):
         """Copy table to clipboard"""
         pd.DataFrame(self._table).to_clipboard()
 
-    def _clicked_table(self):
-        """Set the current viewer dims to the label that was clicked on."""
-
-        row = self._table_widget.currentRow()
+    def _clicked_table(self, right: bool, index: QModelIndex) -> None:
+        """Center the viewer to clicked label. If the right mouse button was used, set
+        layer.show_selected_label to True, else False.
+        """
+        row = index.row()
+        label = self._table["label"][row]
+        self._layer.selected_label = label
+        self._layer.show_selected_label = right
         spatial_columns = sorted([key for key in self._table if "centroid" in key])
         spatial_coords = [int(self._table[col][row]) for col in spatial_columns]
 
         if "time_point" in self._table:
-            t = int(self._table["time_point"][row])
-            new_step = (t, *spatial_coords)
+            new_step = (int(self._table["time_point"][row]), *spatial_coords)
         else:
             new_step = spatial_coords
+
         self._viewer.dims.current_step = new_step
 
-    def _sort_table(self):
+    def _sort_table(self) -> None:
         """Sorts the table in ascending or descending order"""
 
         selected_column = list(self._table.keys())[self._table_widget.currentColumn()]

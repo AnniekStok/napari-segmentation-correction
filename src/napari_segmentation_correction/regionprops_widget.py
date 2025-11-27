@@ -1,3 +1,5 @@
+from itertools import permutations
+
 import dask.array as da
 import napari
 import numpy as np
@@ -6,10 +8,8 @@ from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QCheckBox,
     QGroupBox,
-    QHBoxLayout,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -21,13 +21,74 @@ from .layer_manager import LayerManager
 from .prop_filter_widget import PropertyFilterWidget
 from .regionprops_extended import calculate_extended_props
 
-feature_properties = [
+
+def reorder_to_match(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """
+    Reorder axes of `b` so its leading axes match `a.shape`.
+    If b has one extra axis, that axis will be moved to the end of the returned array.
+    Raises ValueError if matching is impossible.
+    """
+    a = np.asarray(a)
+    b = np.asarray(b)
+
+    shape_a = a.shape
+    shape_b = b.shape
+    nd_a = len(shape_a)
+    nd_b = len(shape_b)
+
+    # same number of dims: try to permute b to match a
+    if nd_b == nd_a:
+        for perm in permutations(range(nd_b)):
+            if tuple(shape_b[i] for i in perm) == shape_a:
+                return b.transpose(perm)
+        raise ValueError(
+            f"No permutation of b.shape {shape_b} matches a.shape {shape_a}."
+        )
+
+    # b has exactly one extra dim: try every axis as the extra one
+    if nd_b == nd_a + 1:
+        axes = list(range(nd_b))
+        for extra_axis in axes:
+            remaining_axes = [ax for ax in axes if ax != extra_axis]
+            # try permutations of the remaining axes to match shape_a
+            for perm_remaining in permutations(remaining_axes):
+                if tuple(shape_b[i] for i in perm_remaining) == shape_a:
+                    # final permutation: place the permuted remaining axes first, then the extra axis last
+                    final_perm = list(perm_remaining) + [extra_axis]
+                    return b.transpose(final_perm)
+        raise ValueError(
+            f"b has one extra axis but no permutation places its other axes in order {shape_a} "
+            f"with the extra axis last. b.shape={shape_b}, a.shape={shape_a}"
+        )
+
+    # any other difference in rank is invalid
+    raise ValueError(
+        "b must have either the same number of dimensions as a, or exactly one more."
+        f" Got a.ndim={nd_a}, b.ndim={nd_b}."
+    )
+
+
+intensity_properties = [
     {
         "region_prop_name": "intensity_mean",
         "display_name": "Mean intensity",
         "enabled": False,
         "dims": [2, 3],
     },
+    {
+        "region_prop_name": "intensity_min",
+        "display_name": "Min intensity",
+        "enabled": False,
+        "dims": [2, 3],
+    },
+    {
+        "region_prop_name": "intensity_max",
+        "display_name": "Max intensity",
+        "enabled": False,
+        "dims": [2, 3],
+    },
+]
+shape_properties = [
     {
         "region_prop_name": "area",
         "display_name": "Area",
@@ -94,12 +155,21 @@ class RegionPropsWidget(QWidget):
         self.feature_dims = 2
         self.axis_widgets = []
 
-        feature_box = QGroupBox("Features to measure")
-        feature_box.setMaximumHeight(250)
-        self.checkbox_layout = QVBoxLayout()
+        intensity_box = QGroupBox("Intensity features")
+        intensity_box.setMaximumHeight(140)
+        shape_box = QGroupBox("Shape features")
+        shape_box.setMaximumHeight(130)
+
+        self.intensity_checkbox_layout = QVBoxLayout()
+        self.shape_checkbox_layout = QVBoxLayout()
         self.checkboxes = []
 
-        for prop in feature_properties:
+        self.intensity_image_dropdown = LayerDropdown(
+            self.viewer, (napari.layers.Image, napari.layers.Labels)
+        )
+        self.intensity_checkbox_layout.addWidget(self.intensity_image_dropdown)
+
+        for prop in intensity_properties:
             checkbox = QCheckBox(prop["display_name"])
             checkbox.setEnabled(prop["enabled"])
             checkbox.setStyleSheet("QCheckBox:disabled { color: grey }")
@@ -108,32 +178,22 @@ class RegionPropsWidget(QWidget):
             self.checkboxes.append(
                 {"region_prop_name": prop["region_prop_name"], "checkbox": checkbox}
             )
+            self.intensity_checkbox_layout.addWidget(checkbox)
 
-            if prop["region_prop_name"] == "intensity_mean":
-                self.intensity_image_dropdown = LayerDropdown(
-                    self.viewer, (napari.layers.Image, napari.layers.Labels)
-                )
-                if self.intensity_image_dropdown.selected_layer is not None:
-                    checkbox.setEnabled(True)
-                int_layout = QHBoxLayout()
-                int_layout.addWidget(checkbox)
-                int_layout.addWidget(self.intensity_image_dropdown)
-                int_layout.setContentsMargins(0, 0, 0, 0)
-                int_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        intensity_box.setLayout(self.intensity_checkbox_layout)
 
-                int_widget = QWidget()
-                int_widget.setLayout(int_layout)
+        for prop in shape_properties:
+            checkbox = QCheckBox(prop["display_name"])
+            checkbox.setEnabled(prop["enabled"])
+            checkbox.setStyleSheet("QCheckBox:disabled { color: grey }")
+            checkbox.stateChanged.connect(self._update_measure_btn_state)
 
-                # Enforce same height behavior as a normal checkbox
-                int_widget.setSizePolicy(checkbox.sizePolicy())
-                self.intensity_image_dropdown.setSizePolicy(
-                    QSizePolicy.Expanding, QSizePolicy.Fixed
-                )
-                self.checkbox_layout.addWidget(int_widget)
-            else:
-                self.checkbox_layout.addWidget(checkbox)
+            self.checkboxes.append(
+                {"region_prop_name": prop["region_prop_name"], "checkbox": checkbox}
+            )
+            self.shape_checkbox_layout.addWidget(checkbox)
 
-        feature_box.setLayout(self.checkbox_layout)
+        shape_box.setLayout(self.shape_checkbox_layout)
 
         # Push button to measure features
         self.measure_btn = QPushButton("Measure properties")
@@ -150,7 +210,8 @@ class RegionPropsWidget(QWidget):
         # Assemble layout
         main_box = QGroupBox("Region properties")
         main_layout = QVBoxLayout()
-        main_layout.addWidget(feature_box)
+        main_layout.addWidget(intensity_box)
+        main_layout.addWidget(shape_box)
         main_layout.addWidget(self.measure_btn)
         main_layout.addWidget(self.prop_filter_widget)
         main_layout.addLayout(self.regionprops_layout)
@@ -173,8 +234,9 @@ class RegionPropsWidget(QWidget):
         checked = [
             ch["region_prop_name"]
             for ch in self.checkboxes
-            if (ch["checkbox"].isChecked() and ch["checkbox"].isVisible())
+            if (ch["checkbox"].isChecked() and ch["checkbox"].isEnabled())
         ]
+
         self.measure_btn.setEnabled(True) if len(
             checked
         ) > 0 else self.measure_btn.setEnabled(False)
@@ -196,7 +258,7 @@ class RegionPropsWidget(QWidget):
         # Set the visibility of each checkbox according to the dimensions
         visible_props = [
             prop["region_prop_name"]
-            for prop in feature_properties
+            for prop in intensity_properties + shape_properties
             if (
                 self.feature_dims in prop["dims"]
                 and self.label_manager.selected_layer is not None
@@ -207,11 +269,14 @@ class RegionPropsWidget(QWidget):
             visible = prop in visible_props
             checkbox_dict["checkbox"].setVisible(visible)
             checkbox_dict["checkbox"].setEnabled(visible)
+
         self.intensity_image_dropdown.setVisible(
-            False
-        ) if self.label_manager.selected_layer is None else self.intensity_image_dropdown.setVisible(
-            True
+            self.label_manager.selected_layer is not None
         )
+
+        if hasattr(self.label_manager.selected_layer, "properties"):
+            self._update_table()
+
         self._update_measure_btn_state()
 
     def _get_selected_features(self) -> list[str]:
@@ -220,7 +285,7 @@ class RegionPropsWidget(QWidget):
         selected_features = [
             ch["region_prop_name"]
             for ch in self.checkboxes
-            if (ch["checkbox"].isChecked() and ch["checkbox"].isVisible())
+            if (ch["checkbox"].isChecked() and ch["checkbox"].isEnabled())
         ]
         selected_features.append("label")  # always include label
         selected_features.append("centroid")
@@ -251,15 +316,23 @@ class RegionPropsWidget(QWidget):
 
         data = self.label_manager.selected_layer.data
         if intensity_image is not None and intensity_image.shape != data.shape:
-            msg = QMessageBox()
-            msg.setWindowTitle("Shape mismatch")
-            msg.setText(
-                f"Label layer and intensity image must have the same shape. Got {self.label_manager.selected_layer.data.shape} and {intensity_image.shape}."
-            )
-            msg.setIcon(QMessageBox.Critical)
-            msg.setStandardButtons(QMessageBox.Ok)
-            msg.exec_()
-            return
+            # if shapes don't match, try to transpose the data such that the order is
+            # correct. Multichannel intensity images are allowed as long as the channel
+            # dimension is the last dimension. Since this does not match with the default
+            # napari order of dims, transpose it here.
+
+            try:
+                intensity_image = reorder_to_match(data, intensity_image)
+            except ValueError:
+                msg = QMessageBox()
+                msg.setWindowTitle("Shape mismatch")
+                msg.setText(
+                    f"Label layer and intensity image must have compatible shapees. Got {self.label_manager.selected_layer.data.shape} and {intensity_image.shape}."
+                )
+                msg.setIcon(QMessageBox.Critical)
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec_()
+                return
         if (self.use_z and self.ndims == 3) or (not self.use_z and self.ndims == 2):
             props = calculate_extended_props(
                 data,

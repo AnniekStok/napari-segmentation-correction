@@ -1,6 +1,8 @@
+import contextlib
+
 import napari
-from napari.utils.events import Event
-from PyQt5.QtCore import pyqtSignal
+import sip
+from psygnal import Signal
 from qtpy.QtWidgets import QComboBox
 
 
@@ -8,21 +10,27 @@ class LayerDropdown(QComboBox):
     """QComboBox widget with functions for updating the selected layer and to update the
     list of options when the list of layers is modified."""
 
-    layer_changed = pyqtSignal(str)  # signal to emit the selected layer name
+    layer_changed = Signal(str)
 
-    def __init__(
-        self, viewer: napari.Viewer, layer_type: tuple, allow_none: bool = False
-    ):
+    def __init__(self, viewer: napari.Viewer, layer_type: tuple, allow_none=False):
         super().__init__()
+
         self.viewer = viewer
         self.layer_type = layer_type
         self.allow_none = allow_none
         self.selected_layer = None
+
+        # track rename callbacks so we can disconnect them
+        self._rename_callbacks = {}
+
+        # viewer connections
         self.viewer.layers.events.inserted.connect(self._on_insert)
         self.viewer.layers.events.changed.connect(self._update_dropdown)
-        self.viewer.layers.events.removed.connect(self._update_dropdown)
+        self.viewer.layers.events.removed.connect(self._on_removed)
         self.viewer.layers.selection.events.changed.connect(self._on_selection_changed)
+
         self.currentTextChanged.connect(self._emit_layer_changed)
+
         self._update_dropdown()
 
     def _on_insert(self, event) -> None:
@@ -30,78 +38,110 @@ class LayerDropdown(QComboBox):
 
         layer = event.value
         if isinstance(layer, self.layer_type):
+            # register callback for rename
+            def _rename_cb(evt):
+                if not sip.isdeleted(self):
+                    self._update_dropdown()
 
-            @layer.events.name.connect
-            def _on_rename(name_event):
-                self._update_dropdown()
+            layer.events.name.connect(_rename_cb)
+            self._rename_callbacks[layer] = _rename_cb
 
             self._update_dropdown()
 
-    def _on_selection_changed(self) -> None:
-        """Request signal emission if the user changes the layer selection."""
+    def _on_removed(self, event) -> None:
+        """Disconnect signals and update the dropdown when a layer is removed."""
 
-        if (
-            len(self.viewer.layers.selection) == 1
-        ):  # Only consider single layer selection
-            selected_layer = self.viewer.layers.selection.active
+        if sip.isdeleted(self):
+            return
+
+        layer = event.value
+        # disconnect rename callback if present
+        cb = self._rename_callbacks.pop(layer, None)
+        if cb:
+            with contextlib.suppress(Exception):
+                layer.events.name.disconnect(cb)
+
+        self._update_dropdown()
+
+    def _on_selection_changed(self):
+        """Update the active layer when the selection changes"""
+        if sip.isdeleted(self):
+            return
+
+        if len(self.viewer.layers.selection) == 1:
+            selected = self.viewer.layers.selection.active
             if (
-                isinstance(selected_layer, self.layer_type)
-                and selected_layer != self.selected_layer
+                isinstance(selected, self.layer_type)
+                and selected != self.selected_layer
             ):
-                self.setCurrentText(selected_layer.name)
+                self.setCurrentText(selected.name)
                 self._emit_layer_changed()
 
-    def _update_dropdown(self, event: Event | None = None) -> None:
-        """Update the list of options in the dropdown menu whenever the list of layers is changed"""
+    def _update_dropdown(self, event=None) -> None:
+        """Update the layers in the dropdown"""
 
-        if (
-            event is None
-            or not hasattr(event, "value")
-            or isinstance(event.value, self.layer_type)
-        ):
-            selected_layer = self.currentText()
-            self.clear()
-            layers = [
-                layer
-                for layer in self.viewer.layers
-                if isinstance(layer, self.layer_type)
-            ]
-            items = []
-            if self.allow_none:
-                self.addItem("No selection")
-                items.append("No selection")
+        if sip.isdeleted(self):
+            return
 
-            for layer in layers:
-                self.addItem(layer.name)
-                items.append(layer.name)
-                layer.events.name.connect(self._update_dropdown)
+        previous = self.currentText()
+        self.clear()
 
-            # In case the currently selected layer is one of the available items, set it again to the current value of the dropdown.
-            if selected_layer in items:
-                self.setCurrentText(selected_layer)
+        layers = [
+            layer for layer in self.viewer.layers if isinstance(layer, self.layer_type)
+        ]
+
+        items = []
+
+        if self.allow_none:
+            self.addItem("No selection")
+            items.append("No selection")
+
+        for layer in layers:
+            self.addItem(layer.name)
+            items.append(layer.name)
+
+        # restore selection if still valid
+        if previous in items:
+            self.setCurrentText(previous)
 
     def _emit_layer_changed(self) -> None:
         """Emit a signal holding the currently selected layer"""
 
-        selected_layer_name = self.currentText()
-        if (
-            selected_layer_name != "No selection"
-            and selected_layer_name in self.viewer.layers
-        ):
-            self.selected_layer = self.viewer.layers[selected_layer_name]
+        if sip.isdeleted(self):
+            return
+
+        name = self.currentText()
+
+        if name != "No selection" and name in self.viewer.layers:
+            self.selected_layer = self.viewer.layers[name]
         else:
             self.selected_layer = None
-            selected_layer_name = ""
+            name = ""
 
-        self.layer_changed.emit(selected_layer_name)
+        self.layer_changed.emit(name)
 
     def deleteLater(self) -> None:
-        """Ensure all connections are disconnected before deletion."""
-        self.viewer.layers.events.inserted.disconnect(self._on_insert)
-        self.viewer.layers.events.changed.disconnect(self._update_dropdown)
-        self.viewer.layers.events.removed.disconnect(self._update_dropdown)
-        self.viewer.layers.selection.events.changed.disconnect(
-            self._on_selection_changed
-        )
-        self.currentTextChanged.disconnect(self._emit_layer_changed)
+        """Disconnect everything cleanly."""
+
+        with contextlib.suppress(Exception):
+            self.viewer.layers.events.inserted.disconnect(self._on_insert)
+        with contextlib.suppress(Exception):
+            self.viewer.layers.events.changed.disconnect(self._update_dropdown)
+        with contextlib.suppress(Exception):
+            self.viewer.layers.events.removed.disconnect(self._on_removed)
+        with contextlib.suppress(Exception):
+            self.viewer.layers.selection.events.changed.disconnect(
+                self._on_selection_changed
+            )
+
+        # per-layer callbacks
+        for layer, cb in list(self._rename_callbacks.items()):
+            with contextlib.suppress(Exception):
+                layer.events.name.disconnect(cb)
+        self._rename_callbacks.clear()
+
+        # qt signal
+        with contextlib.suppress(Exception):
+            self.currentTextChanged.disconnect(self._emit_layer_changed)
+
         super().deleteLater()

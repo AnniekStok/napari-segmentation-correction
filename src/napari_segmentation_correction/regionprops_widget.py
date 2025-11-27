@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
 )
 from tqdm import tqdm
 
+from .color_feature_widget import ColorFeatureWidget
 from .custom_table_widget import ColoredTableWidget
 from .layer_dropdown import LayerDropdown
 from .layer_manager import LayerManager
@@ -204,6 +205,12 @@ class RegionPropsWidget(QWidget):
         self.prop_filter_widget = PropertyFilterWidget(self.viewer, self.label_manager)
         self.prop_filter_widget.setVisible(False)
 
+        ### Add widget to color by feature
+        self.color_by_feature_widget = ColorFeatureWidget(
+            self.viewer, self.label_manager
+        )
+        self.color_by_feature_widget.setVisible(False)
+
         # Add table layout
         self.regionprops_layout = QVBoxLayout()
 
@@ -214,6 +221,7 @@ class RegionPropsWidget(QWidget):
         main_layout.addWidget(shape_box)
         main_layout.addWidget(self.measure_btn)
         main_layout.addWidget(self.prop_filter_widget)
+        main_layout.addWidget(self.color_by_feature_widget)
         main_layout.addLayout(self.regionprops_layout)
         main_box.setLayout(main_layout)
 
@@ -364,6 +372,7 @@ class RegionPropsWidget(QWidget):
         if hasattr(self.label_manager.selected_layer, "properties"):
             self.label_manager.selected_layer.properties = props
             self.prop_filter_widget.set_properties()
+            self.color_by_feature_widget.set_properties()
             self._update_table()
 
     def _update_table(self) -> None:
@@ -371,7 +380,7 @@ class RegionPropsWidget(QWidget):
         if self.table is not None:
             self.table.hide()
             self.prop_filter_widget.setVisible(False)
-
+            self.color_by_feature_widget.setVisible(False)
         if (
             self.viewer is not None
             and self.label_manager.selected_layer is not None
@@ -383,3 +392,4 @@ class RegionPropsWidget(QWidget):
             self.table.setMinimumWidth(500)
             self.regionprops_layout.addWidget(self.table)
             self.prop_filter_widget.setVisible(True)
+            self.color_by_feature_widget.setVisible(True)

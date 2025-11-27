@@ -193,7 +193,7 @@ def regionprops_extended(
 
 
 def props_to_dataframe(regionprops, selected_properties=None) -> pd.DataFrame:
-    """Convert ExtendedRegionProperties instance to pandas dataframe, following the logical from porespy.metrics._regionprops.props_to_dataframe"""
+    """Convert ExtendedRegionProperties instance to pandas dataframe, following the logic from porespy.metrics._regionprops.props_to_dataframe"""
 
     if selected_properties is None:
         selected_properties = regionprops[0].__dict__()
@@ -201,7 +201,7 @@ def props_to_dataframe(regionprops, selected_properties=None) -> pd.DataFrame:
     new_props = ["label"]
     # need to check if any of the props return multiple values
     for item in selected_properties:
-        if isinstance(getattr(regionprops[0], item), tuple):
+        if isinstance(getattr(regionprops[0], item), tuple | np.ndarray | list):
             for i, _ in enumerate(getattr(regionprops[0], item)):
                 new_props.append(item + "-" + str(i + 1))
         else:

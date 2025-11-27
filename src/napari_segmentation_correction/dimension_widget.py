@@ -23,20 +23,60 @@ class DimensionWidget(QWidget):
         self.viewer = viewer
 
         self.layer = None
+        self.row_active = [False] * 5
 
         dim_box = QGroupBox("Dimensions")
+        label = QLabel("Dimensions are (re)ordered in CTZYX order")
+        label.setWordWrap(True)
+        font = label.font()
+        font.setItalic(True)
+        label.setFont(font)
+
         self.grid = QGridLayout()
 
         # headers
-        self.grid.addWidget(QLabel("Index"), 0, 1)
         self.grid.addWidget(QLabel("Axis"), 0, 0)
+        self.grid.addWidget(QLabel("Name"), 0, 1)
         self.grid.addWidget(QLabel("Pixel scaling"), 0, 2)
+
+        # Pre-create all widget rows
+        self.axis_widgets = []
+        for row in range(5):
+            dim_label = QLabel("")
+            axis_combo = QComboBox()
+            axis_combo.addItems(["C", "T", "Z", "Y", "X"])
+
+            scale_spin = QDoubleSpinBox()
+            scale_spin.setSingleStep(0.1)
+            scale_spin.setMinimum(0.01)
+
+            axis_combo.currentIndexChanged.connect(
+                lambda _, a=axis_combo, s=scale_spin: s.setVisible(
+                    a.currentText() not in ("C", "T")
+                )
+            )
+            axis_combo.currentIndexChanged.connect(self.update_apply_button_state)
+
+            # Add to layout
+            self.grid.addWidget(dim_label, row + 1, 0)
+            self.grid.addWidget(axis_combo, row + 1, 1)
+            self.grid.addWidget(scale_spin, row + 1, 2)
+
+            # hide for now
+            dim_label.hide()
+            axis_combo.hide()
+            scale_spin.hide()
+
+            # Store tuple
+            self.axis_widgets.append((dim_label, axis_combo, scale_spin))
 
         # Apply button
         self.apply_btn = QPushButton("Apply")
+        self.apply_btn.setEnabled(False)
         self.apply_btn.clicked.connect(self.apply_dims)
 
         dim_layout = QVBoxLayout()
+        dim_layout.addWidget(label)
         dim_layout.addLayout(self.grid)
         dim_layout.addWidget(self.apply_btn)
         dim_box.setLayout(dim_layout)
@@ -46,10 +86,9 @@ class DimensionWidget(QWidget):
         self.setLayout(layout)
 
         # Connect to viewer signal to update the active layer.
-        self.viewer.layers.selection.events.changed.connect(self._on_selection_changed)
-        self.populate_dimensions(self.layer)
+        self.viewer.layers.selection.events.active.connect(self._on_selection_changed)
 
-    def _on_selection_changed(self) -> None:
+    def _on_selection_changed(self, event=None) -> None:
         """Update the active layer"""
 
         if (
@@ -58,86 +97,72 @@ class DimensionWidget(QWidget):
             selected_layer = self.viewer.layers.selection.active
             if isinstance(selected_layer, napari.layers.Labels | napari.layers.Image):
                 self.layer = selected_layer
+                self._update_dimensions()
             else:
                 self.layer = None
-                return
 
-        self.populate_dimensions(self.layer)
+    def _update_dimensions(self):
+        """Update the dimension names, order, and scaling. Dimensions are always ordered
+        in CTZYX order."""
 
-    def populate_dimensions(self, layer: napari.layers.Layer | None) -> None:
-        """Populate the dimension information based on the given layer"""
+        ndim = self.layer.data.ndim
 
-        # Clear existing widgets
-        for i in reversed(range(self.grid.count())):
-            widget = self.grid.itemAt(i).widget()
-            if widget is not None and widget not in [self.apply_btn]:
-                self.grid.removeWidget(widget)
-                widget.deleteLater()
-
-        self.layer = layer
-        self.axis_widgets = []
-
-        if layer is None:
-            for widget in self.axis_widgets:
-                for w in widget:
-                    w.setVisible(False)
-            return
-
-        # Check for existing dimension information in the layer metadata
-        if "dimension_info" in layer.metadata:
-            dims, axes_labels, scale_info = layer.metadata["dimension_info"]
+        if "dimension_info" in self.layer.metadata:
+            _, axes_labels, _ = self.layer.metadata["dimension_info"]
             offset = 0
         else:
-            ndim = layer.data.ndim
             axes_labels = ["C", "T", "Z", "Y", "X"]
-            dims = range(ndim)
-            scale_info = layer.scale
             offset = len(axes_labels) - ndim
 
-        for d, label in enumerate(dims):
-            dim = QLabel(str(label))
-            dim.setVisible(True)
-            axis = QComboBox()
-            axis.addItems(["C", "T", "Z", "Y", "X"])
-            axis.setCurrentText(axes_labels[d + offset])
-            axis.setVisible(True)
-            scale = QDoubleSpinBox()
-            scale.setValue(scale_info[d])
-            scale.setSingleStep(0.1)
-            scale.setMinimum(0.01)
+        scale_info = self.layer.scale
 
-            if axis.currentText() in ("C", "T"):
-                scale.setVisible(False)
+        # Enable/disable rows
+        for i, (dim_label, axis_combo, scale_spin) in enumerate(self.axis_widgets):
+            if i < ndim:
+                self.row_active[i] = True
+
+                # Show needed rows
+                dim_label.show()
+                axis_combo.show()
+
+                axis_combo.setCurrentText(axes_labels[i + offset])
+                dim_label.setText(str(i) + f" [{self.layer.data.shape[i]}]")
+
+                # Set scale
+                s = scale_info[i] if i < len(scale_info) else 1
+                scale_spin.setValue(s)
+                scale_spin.setVisible(axis_combo.currentText() not in ("C", "T"))
             else:
-                scale.setVisible(True)
+                self.row_active[i] = False
 
-            axis.currentIndexChanged.connect(
-                lambda _, a=axis, s=scale: s.setVisible(
-                    a.currentText() not in ("C", "T")
-                )
-            )
-            axis.currentIndexChanged.connect(self.update_apply_button_state)
+                # Hide unused rows
+                dim_label.hide()
+                axis_combo.hide()
+                scale_spin.hide()
 
-            self.grid.addWidget(dim, d + 1, 0)
-            self.grid.addWidget(axis, d + 1, 1)
-            self.grid.addWidget(scale, d + 1, 2)
+        if "dimension_info" not in self.layer.metadata:
+            self.apply_dims()
+        else:
+            self.update_apply_button_state()
+            self.dims_updated.emit()
 
-            self.axis_widgets.append((dim, axis, scale))
+    def update_apply_button_state(self):
+        """Check if the current dimensions are valid (must include Y,X, no duplicate axes)"""
 
-        self.apply_dims()
-
-    def update_apply_button_state(self) -> None:
-        """Update whether the apply button should be enabled"""
-
-        # check for duplicate axes
         axes = [
-            self.axis_widgets[i][1].currentText() for i in range(len(self.axis_widgets))
+            axis_combo.currentText()
+            for active, (dim_label, axis_combo, scale_spin) in zip(
+                self.row_active, self.axis_widgets, strict=False
+            )
+            if active
         ]
+
+        # Duplicate axes?
         if len(axes) != len(set(axes)):
             self.apply_btn.setEnabled(False)
             return
 
-        # check that Y and X are present
+        # Must contain Y and X
         if "Y" not in axes or "X" not in axes:
             self.apply_btn.setEnabled(False)
             return
@@ -150,7 +175,7 @@ class DimensionWidget(QWidget):
         if self.layer is None:
             return
 
-        _, axes, scale = self.get_dimension_info()
+        dims, axes, scale = self.get_dimension_info()
 
         # update layer and viewer dims scale
         old_step = self.viewer.dims.current_step
@@ -171,18 +196,23 @@ class DimensionWidget(QWidget):
         for axis in napari_order:
             if axis in current_order:
                 transpose_order.append(current_order.index(axis))
-        self.layer.data = np.transpose(self.layer.data, transpose_order)
+        if transpose_order != list(range(len(transpose_order))):
+            self.layer.data = np.transpose(self.layer.data, transpose_order)
 
-        self.layer.metadata["dimension_info"] = self.get_dimension_info()
-        self.dims_updated.emit()
+        self.layer.metadata["dimension_info"] = (dims, axes, scale)
+        self._update_dimensions()  # to update text in the widgets
 
-    def get_dimension_info(self) -> list[tuple[str, float]]:
-        """Get the dimension info from the widget"""
+    def get_dimension_info(self):
+        """Extract dimension info from the current settings in the widgets"""
 
-        dims = [self.axis_widgets[i][0].text() for i in range(len(self.axis_widgets))]
-        axes = [
-            self.axis_widgets[i][1].currentText() for i in range(len(self.axis_widgets))
-        ]
-        scale = [self.axis_widgets[i][2].value() for i in range(len(self.axis_widgets))]
+        dims, axes, scale = [], [], []
+
+        for active, (dim_label, axis_combo, scale_spin) in zip(
+            self.row_active, self.axis_widgets, strict=False
+        ):
+            if active:
+                dims.append(dim_label.text())
+                axes.append(axis_combo.currentText())
+                scale.append(scale_spin.value())
 
         return dims, axes, scale

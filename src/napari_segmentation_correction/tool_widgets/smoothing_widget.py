@@ -20,6 +20,8 @@ from napari_segmentation_correction.layer_control_widgets.layer_manager import (
 
 
 def median_filter(img: np.ndarray, size: int) -> np.ndarray:
+    """Return the resulting image after applying median filter of given size."""
+
     return ndimage.median_filter(img, size=size)
 
 

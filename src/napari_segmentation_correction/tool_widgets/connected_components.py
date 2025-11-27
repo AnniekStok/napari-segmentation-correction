@@ -57,7 +57,7 @@ def connected_component_labeling(img: np.ndarray) -> np.ndarray:
 
 
 class ConnectedComponents(QWidget):
-    """Widget to run connected component analysis"""
+    """Widget for various connected component analysis functions."""
 
     def __init__(
         self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
@@ -108,7 +108,7 @@ class ConnectedComponents(QWidget):
         main_layout.addWidget(conn_comp_box)
         self.setLayout(main_layout)
 
-    def _update_button_state(self):
+    def _update_button_state(self) -> None:
         self.conncomp_btn.setEnabled(
             isinstance(self.label_manager.selected_layer, napari.layers.Labels)
         )
@@ -119,7 +119,7 @@ class ConnectedComponents(QWidget):
             isinstance(self.label_manager.selected_layer, napari.layers.Labels)
         )
 
-    def _keep_largest_cluster(self):
+    def _keep_largest_cluster(self) -> None:
         """Keep only the labels part of the largest non-zero connected component"""
 
         action = keep_largest_cluster
@@ -136,7 +136,7 @@ class ConnectedComponents(QWidget):
                 scale=self.label_manager.selected_layer.scale,
             )
 
-    def _keep_largest_fragment(self):
+    def _keep_largest_fragment(self) -> None:
         """Keep only the largest fragment per label"""
 
         action = keep_largest_fragment_per_label
@@ -154,7 +154,7 @@ class ConnectedComponents(QWidget):
                 scale=self.label_manager.selected_layer.scale,
             )
 
-    def _conn_comp(self):
+    def _conn_comp(self) -> None:
         """Run connected component analysis to (re) label the labels array"""
 
         action = connected_component_labeling

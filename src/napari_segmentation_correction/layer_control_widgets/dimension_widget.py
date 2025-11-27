@@ -101,7 +101,7 @@ class DimensionWidget(QWidget):
             else:
                 self.layer = None
 
-    def _update_dimensions(self):
+    def _update_dimensions(self) -> None:
         """Update the dimension names, order, and scaling. Dimensions are always ordered
         in CTZYX order."""
 
@@ -146,7 +146,7 @@ class DimensionWidget(QWidget):
             self.update_apply_button_state()
             self.dims_updated.emit()
 
-    def update_apply_button_state(self):
+    def update_apply_button_state(self) -> None:
         """Check if the current dimensions are valid (must include Y,X, no duplicate axes)"""
 
         axes = [
@@ -202,7 +202,7 @@ class DimensionWidget(QWidget):
         self.layer.metadata["dimension_info"] = (dims, axes, scale)
         self._update_dimensions()  # to update text in the widgets
 
-    def get_dimension_info(self):
+    def get_dimension_info(self) -> None:
         """Extract dimension info from the current settings in the widgets"""
 
         dims, axes, scale = [], [], []

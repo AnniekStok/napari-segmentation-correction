@@ -84,7 +84,7 @@ class ThresholdWidget(QWidget):
         layout.addWidget(threshold_box)
         self.setLayout(layout)
 
-    def _update_threshold_layer(self, selected_layer) -> None:
+    def _update_threshold_layer(self, selected_layer: napari.layers.Layer) -> None:
         """Update the layer that is set to be the 'source labels' layer for copying labels from."""
 
         if selected_layer == "":
@@ -93,7 +93,7 @@ class ThresholdWidget(QWidget):
             self.threshold_layer = self.viewer.layers[selected_layer]
             self.threshold_layer_dropdown.setCurrentText(selected_layer)
 
-    def _threshold(self):
+    def _threshold(self) -> None:
         """Threshold the selected label or intensity image"""
 
         action = threshold

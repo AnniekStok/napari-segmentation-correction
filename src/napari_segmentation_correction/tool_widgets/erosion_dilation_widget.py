@@ -117,7 +117,7 @@ class ErosionDilationWidget(QWidget):
         layout.addWidget(dil_erode_box)
         self.setLayout(layout)
 
-    def _erode_labels(self):
+    def _erode_labels(self) -> None:
         """Shrink oversized labels through erosion"""
 
         diam = self.structuring_element_diameter.value()
@@ -138,7 +138,7 @@ class ErosionDilationWidget(QWidget):
                 scale=self.label_manager.selected_layer.scale,
             )
 
-    def _dilate_labels(self):
+    def _dilate_labels(self) -> None:
         """Dilate labels in the selected layer."""
 
         diam = self.structuring_element_diameter.value()

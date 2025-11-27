@@ -32,7 +32,11 @@ _int_types = [
 ]
 
 
-def _minimal_safe_dtype(img1, img2, op="sub"):
+def _minimal_safe_dtype(
+    img1: np.ndarray, img2: np.ndarray, op: str = "sub"
+) -> np.dtype:
+    """Return the minimal safe dtype for a given operation between between two arrays"""
+
     # If either is float, promote to larger float
     if np.issubdtype(img1.dtype, np.floating) or np.issubdtype(img2.dtype, np.floating):
         return np.result_type(img1, img2)
@@ -71,32 +75,38 @@ def _minimal_safe_dtype(img1, img2, op="sub"):
     return np.int64
 
 
-def _adjust_or_clip(result, original_dtype, adjust_dtype):
+def _adjust_or_clip(
+    img: np.ndarray, original_dtype: np.dtype, adjust_dtype: bool
+) -> np.ndarray:
+    """Return the image in a new dtype or clip it to the original dtype."""
+
     if adjust_dtype:
-        # If original was integer, return the smallest integer dtype that fits the result
+        # If original was integer, return the smallest integer dtype that fits the img
         if np.issubdtype(original_dtype, np.integer):
-            rmin = int(result.min())
-            rmax = int(result.max())
+            rmin = int(img.min())
+            rmax = int(img.max())
             for dtype in _int_types:
                 info = np.iinfo(dtype)
                 if rmin >= info.min and rmax <= info.max:
-                    return result.astype(dtype)
-            return result.astype(np.int64)
+                    return img.astype(dtype)
+            return img.astype(np.int64)
         else:
-            # For floats, choose a float type that can represent the result
-            return result.astype(np.result_type(result.dtype, original_dtype))
+            # For floats, choose a float type that can represent the img
+            return img.astype(np.result_type(img.dtype, original_dtype))
     else:
         # Clip to the bounds of original dtype
         if np.issubdtype(original_dtype, np.integer):
             info = np.iinfo(original_dtype)
-            result = np.clip(result, info.min, info.max)
-            return result.astype(original_dtype)
+            img = np.clip(img, info.min, info.max)
+            return img.astype(original_dtype)
         else:
             # For floats, no need to clip
-            return result
+            return img
 
 
 def add_images(img1: np.ndarray, img2: np.ndarray, adjust_dtype=True) -> np.ndarray:
+    """Add img2 to img1"""
+
     original_dtype = img1.dtype
     safe_dtype = _minimal_safe_dtype(img1, img2, op="add")
     result = img1.astype(safe_dtype) + img2.astype(safe_dtype)
@@ -106,6 +116,8 @@ def add_images(img1: np.ndarray, img2: np.ndarray, adjust_dtype=True) -> np.ndar
 def subtract_images(
     img1: np.ndarray, img2: np.ndarray, adjust_dtype=True
 ) -> np.ndarray:
+    """Subtract img2 from img1"""
+
     original_dtype = img1.dtype
     safe_dtype = _minimal_safe_dtype(img1, img2, op="sub")
     result = img1.astype(safe_dtype) - img2.astype(safe_dtype)
@@ -115,6 +127,8 @@ def subtract_images(
 def multiply_images(
     img1: np.ndarray, img2: np.ndarray, adjust_dtype=True
 ) -> np.ndarray:
+    """Multiply img1 by img2"""
+
     original_dtype = img1.dtype
     safe_dtype = _minimal_safe_dtype(img1, img2, op="mul")
     result = img1.astype(safe_dtype) * img2.astype(safe_dtype)
@@ -122,6 +136,8 @@ def multiply_images(
 
 
 def divide_images(img1: np.ndarray, img2: np.ndarray, adjust_dtype=True) -> np.ndarray:
+    """Divide img1 by img2"""
+
     original_dtype = img1.dtype
     # Division always promotes to float to avoid truncation
     result = np.divide(
@@ -140,10 +156,13 @@ def divide_images(img1: np.ndarray, img2: np.ndarray, adjust_dtype=True) -> np.n
 
 
 def logical_and(img1: np.ndarray, img2: np.ndarray, **kwargs) -> np.ndarray:
+    """Compute logical AND of img1 and img2"""
+
     return np.logical_and(img1 != 0, img2 != 0).astype(int)
 
 
 def logical_or(img1: np.ndarray, img2: np.ndarray, **kwargs) -> np.ndarray:
+    """Compute logical OR of img1 and img2"""
     return np.logical_or(img1 != 0, img2 != 0).astype(int)
 
 
@@ -236,7 +255,7 @@ class ImageCalculator(QWidget):
             self.image2_layer = self.viewer.layers[selected_layer]
             self.image2_dropdown.setCurrentText(selected_layer)
 
-    def _calculate_images(self):
+    def _calculate_images(self) -> None:
         """Execute mathematical operations between two images."""
 
         if self.image1_layer.data.shape != self.image2_layer.data.shape:

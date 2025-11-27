@@ -1,5 +1,5 @@
 """
-Napari plugin widget for editing N-dimensional label data
+Toolbox for editing 2D-5D label data.
 """
 
 import napari
@@ -58,7 +58,7 @@ class LabelToolbox(QWidget):
         self.tab_widget.addTab(controls_scroll_area, "Extra Layer Controls")
         self.tab_widget.setCurrentIndex(1)
 
-        ### add combined editing widgets widgets
+        ### add combined tool widgets
         self.edit_widgets = ToolWidgets(self.viewer, self.label_manager)
         scroll_area = QScrollArea()
         scroll_area.setWidget(self.edit_widgets)

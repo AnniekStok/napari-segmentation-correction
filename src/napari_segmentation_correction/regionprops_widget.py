@@ -152,7 +152,9 @@ shape_properties = [
 
 
 class RegionPropsWidget(QWidget):
-    """Widget showing region props as a table and plot widget"""
+    """Widget to compute region properties, display a table, and allow the user to color
+    labels by feature and to filter by feature.
+    """
 
     def __init__(
         self, viewer: "napari.viewer.Viewer", label_manager: LayerManager

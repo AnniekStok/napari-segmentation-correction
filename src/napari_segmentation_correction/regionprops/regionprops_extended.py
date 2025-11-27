@@ -7,7 +7,9 @@ from skimage.measure._regionprops import RegionProperties
 
 
 class ExtendedRegionProperties(RegionProperties):
-    """Adding additional properties to skimage.measure._regionprops following the logic from the porespy package with some modifications to include the spacing information."""
+    """Adding additional properties to skimage.measure._regionprops following the logic
+    from the porespy package with some modifications to include the spacing information.
+    """
 
     @property
     def ellipse_axes(self):
@@ -18,10 +20,13 @@ class ExtendedRegionProperties(RegionProperties):
         """
         Calculate the three axes radii of the fitted ellipsoid.
 
-        This method calculates the principal axes of inertia for the label region, which are used to determine the lengths of the axes radii of an ellipsoid that approximates the shape of the region.
+        This method calculates the principal axes of inertia for the label region, which
+        are used to determine the lengths of the axes radii of an ellipsoid that
+        approximates the shape of the region.
 
         Returns:
-            tuple: A tuple containing the lengths of the three principal axes radii (longr, midr, shortr).
+            tuple: A tuple containing the lengths of the three principal axes radii
+            (longr, midr, shortr).
 
         """
 
@@ -45,7 +50,9 @@ class ExtendedRegionProperties(RegionProperties):
         i_yz = np.sum(y * z)
         i = np.array([[i_xx, -i_xy, -i_xz], [-i_xy, i_yy, -i_yz], [-i_xz, -i_yz, i_zz]])
 
-        # Compute the eigenvalues and eigenvectors of the inertia tensor. The eigenvalues of the inertia tensor represent the principal moments of inertia, and the eigenvectors represent the directions of the principal axes.
+        # Compute the eigenvalues and eigenvectors of the inertia tensor. The eigenvalues
+        # of the inertia tensor represent the principal moments of inertia, and the
+        # eigenvectors represent the directions of the principal axes.
         eig = np.linalg.eig(i)
         eigval = eig[0]
 
@@ -126,7 +133,8 @@ class ExtendedRegionProperties(RegionProperties):
         """
         Calculate the sphericity of the region.
 
-        Sphericity is defined as the ratio of the surface area of a sphere with the same volume as the region to the surface area of the region.
+        Sphericity is defined as the ratio of the surface area of a sphere with the same
+        volume as the region to the surface area of the region.
 
         Returns:
             float: The sphericity of the region.
@@ -142,7 +150,8 @@ class ExtendedRegionProperties(RegionProperties):
         """
         Calculate the volume of the region.
 
-        The volume is calculated as the number of voxels in the region multiplied by the product of the spacing in each dimension.
+        The volume is calculated as the number of voxels in the region multiplied by the
+        product of the spacing in each dimension.
 
         Returns:
             float: The volume of the region.
@@ -166,7 +175,8 @@ def regionprops_extended(
     img: np.ndarray, spacing: tuple[float], intensity_image: np.ndarray | None = None
 ) -> list[ExtendedRegionProperties]:
     """
-    Create instances of ExtendedRegionProperties that extend skimage.measure.RegionProperties.
+    Create instances of ExtendedRegionProperties that extend
+    skimage.measure.RegionProperties.
 
     Args:
         img (np.ndarray): The labeled image.
@@ -193,7 +203,8 @@ def regionprops_extended(
 
 
 def props_to_dataframe(regionprops, selected_properties=None) -> pd.DataFrame:
-    """Convert ExtendedRegionProperties instance to pandas dataframe, following the logic from porespy.metrics._regionprops.props_to_dataframe"""
+    """Convert ExtendedRegionProperties instance to pandas dataframe, following the logic
+    from porespy.metrics._regionprops.props_to_dataframe"""
 
     if selected_properties is None:
         selected_properties = regionprops[0].__dict__()

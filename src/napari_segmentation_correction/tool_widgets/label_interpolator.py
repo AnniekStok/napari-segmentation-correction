@@ -22,16 +22,16 @@ from napari_segmentation_correction.layer_control_widgets.layer_manager import (
 )
 
 
-def signed_distance_transform(mask):
+def signed_distance_transform(mask: np.ndarray) -> np.ndarray:
     mask = mask.astype(bool)
     dist_out = distance_transform_edt(~mask)
     dist_in = distance_transform_edt(mask)
     return dist_out - dist_in
 
 
-def interpolate_binary_mask(mask):
+def interpolate_binary_mask(mask: np.ndarray) -> np.ndarray:
     """
-    Interpolates a sparse binary mask array using SDTs along the first axis.
+    Interpolates a binary mask array using SDTs along the first axis.
     Args:
         mask (ndarray): Binary array of shape (T, X, Y, Z) or (X, Y, Z), etc.,
                         where some slices along 'axis' contain valid masks
@@ -58,7 +58,8 @@ def interpolate_binary_mask(mask):
 
 
 class InterpolationWidget(QWidget):
-    """Widget to interpolate between nonzero pixels in a label layer using signed distance transforms."""
+    """Widget to interpolate between nonzero pixels in a label layer using signed
+    distance transforms."""
 
     def __init__(
         self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
@@ -85,7 +86,7 @@ class InterpolationWidget(QWidget):
         main_layout.addWidget(interpolator_box)
         self.setLayout(main_layout)
 
-    def _interpolate(self):
+    def _interpolate(self) -> None:
         """Interpolate between the nonzero pixels in the selected layer"""
 
         if isinstance(self.label_manager.selected_layer.data, da.core.Array):

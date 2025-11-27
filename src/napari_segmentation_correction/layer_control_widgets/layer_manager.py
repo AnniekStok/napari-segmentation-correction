@@ -12,7 +12,8 @@ from napari_segmentation_correction.helpers.layer_dropdown import LayerDropdown
 
 
 class LayerManager(QWidget):
-    """QComboBox widget with functions for updating the selected layer and to update the list of options when the list of layers is modified."""
+    """QComboBox widget with functions for updating the selected layer and to update the 
+    list of options when the list of layers is modified."""
 
     layer_update = Signal()
 
@@ -41,7 +42,7 @@ class LayerManager(QWidget):
         self.label_dropdown._emit_layer_changed()
 
     @property
-    def selected_layer(self):
+    def selected_layer(self) -> napari.layers.Layer:
         return self._selected_layer
 
     @selected_layer.setter
@@ -64,7 +65,8 @@ class LayerManager(QWidget):
         self.layer_update.emit()
 
     def _convert_to_array(self) -> None:
-        """Convert from dask array to in-memory array. This is necessary for manual editing using the label tools (brush, eraser, fill bucket)."""
+        """Convert from dask array to in-memory array. This is necessary for manual 
+        editing using the label tools (brush, eraser, fill bucket)."""
 
         if isinstance(self._selected_layer.data, da.core.Array):
             stack = []

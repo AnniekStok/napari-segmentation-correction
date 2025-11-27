@@ -19,7 +19,10 @@ from qtpy.QtWidgets import (
 from napari_segmentation_correction.helpers.layer_dropdown import LayerDropdown
 
 
-def check_value_dtype(value, dtype):
+def check_value_dtype(value, dtype: np.dtype) -> tuple[bool, np.dtype]:
+    """Check if a given value fits in a given dtype, if not, return the next available
+    dtype."""
+
     # Get min and max for the dtype
     info = np.iinfo(dtype)
     within_range = info.min <= value <= info.max
@@ -37,6 +40,8 @@ def check_value_dtype(value, dtype):
 
 
 class DimsRadioButtons(QWidget):
+    """Radio buttons to choose dimensions."""
+
     def __init__(self) -> None:
         super().__init__()
 

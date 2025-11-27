@@ -80,10 +80,10 @@ def process_action(
     **action_kwargs,
 ) -> da.core.Array | np.ndarray:
     """
-    Process a dask array segmentation with given img2 and action.
+    Process a callable action that takes two input arrays.
     If img1_index and img2_index are both provided, they should be iterables of the same length.
     If only img1_index is provided, img2 is assumed to be 2D/3D and applied to each img1 slice.
-    Returns a dask array with processed data.
+    Returns a numpy or dask array with processed data.
     """
 
     if isinstance(img1, np.ndarray) and not in_place:
@@ -198,10 +198,8 @@ def process_action_seg(
     **action_kwargs,
 ) -> da.core.Array | np.ndarray:
     """
-    Process a dask array segmentation with given img2 and action.
-    If seg_index and img2_index are both provided, they should be iterables of the same length.
-    If only seg_index is provided, img2 is assumed to be 2D/3D and applied to each seg slice.
-    Returns a dask array with processed data.
+    Process a callable action that takes one input array.
+    Returns a numpy or dask array with processed data.
     """
 
     if isinstance(seg, np.ndarray) and not in_place:

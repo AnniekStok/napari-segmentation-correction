@@ -50,14 +50,14 @@ class LabelBoundaries(QWidget):
         main_layout.addWidget(boundary_box)
         self.setLayout(main_layout)
 
-    def _update_button_state(self):
+    def _update_button_state(self) -> None:
         """Update button state"""
 
         self.compute_btn.setEnabled(
             isinstance(self.label_manager.selected_layer, napari.layers.Labels)
         )
 
-    def _compute_boundaries(self):
+    def _compute_boundaries(self) -> None:
         """Compute the label boundaries of a label image"""
 
         action = compute_boundaries

@@ -22,7 +22,8 @@ from napari_segmentation_correction.layer_control_widgets.save_labels_widget imp
 
 
 class LayerControlsWidget(QWidget):
-    """Widget showing region props as a table and plot widget"""
+    """Widgets for additional layer controls, including setting layer dimensions, plane
+    sliders, copy-pasting between layers, and saving layer data in different formats."""
 
     def __init__(
         self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
@@ -45,8 +46,8 @@ class LayerControlsWidget(QWidget):
         ### plane sliders
         plane_slider_box = QGroupBox("Plane Sliders")
         plane_slider_layout = QVBoxLayout()
-        self.plane_sliders = PlaneSliderWidget(self.viewer)
-        plane_slider_layout.addWidget(self.plane_sliders)
+        plane_sliders = PlaneSliderWidget(self.viewer)
+        plane_slider_layout.addWidget(plane_sliders)
         plane_slider_box.setLayout(plane_slider_layout)
         layout.addWidget(plane_slider_box)
 
@@ -54,7 +55,7 @@ class LayerControlsWidget(QWidget):
         self.copy_label_widget = CopyLabelWidget(self.viewer)
         layout.addWidget(self.copy_label_widget)
 
-        ### Add widget to save labels
+        ### Add widget to save image and label layer data
         save_labels = SaveLabelsWidget(self.viewer)
         layout.addWidget(save_labels)
 

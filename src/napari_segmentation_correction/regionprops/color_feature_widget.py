@@ -15,7 +15,7 @@ from napari_segmentation_correction.layer_control_widgets.layer_manager import (
 
 
 class ColorFeatureWidget(QWidget):
-    """Widget to produce images colored by property"""
+    """Widget to produce images colored by property."""
 
     def __init__(
         self, viewer: "napari.viewer.Viewer", label_manager: LayerManager

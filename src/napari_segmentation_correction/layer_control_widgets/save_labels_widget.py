@@ -14,19 +14,23 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QPushButton,
     QVBoxLayout,
-    QWidget,
+)
+
+from napari_segmentation_correction.helpers.base_tool_widget import BaseToolWidget
+from napari_segmentation_correction.helpers.process_actions_helpers import (
+    remove_invalid_chars,
 )
 
 
-class SaveLabelsWidget(QWidget):
+class SaveLabelsWidget(BaseToolWidget):
     """Widget for saving label data with options for datatype, compression, and whether to split time points."""
 
-    def __init__(self, viewer: "napari.viewer.Viewer") -> None:
-        super().__init__()
-
-        self.viewer = viewer
-        self.layer = None
-        self.viewer.layers.selection.events.changed.connect(self._on_selection_changed)
+    def __init__(
+        self,
+        viewer: "napari.viewer.Viewer",
+        layer_type=(napari.layers.Labels, napari.layers.Image),
+    ) -> None:
+        super().__init__(viewer, layer_type)
 
         # Select datatype
         self.select_dtype = QComboBox()
@@ -87,32 +91,16 @@ class SaveLabelsWidget(QWidget):
         main_layout.addWidget(save_box)
         self.setLayout(main_layout)
 
-    def _on_selection_changed(self) -> None:
-        """Update the active layer"""
+        self.update_status.connect(self._update_status)
 
-        if (
-            len(self.viewer.layers.selection) == 1
-        ):  # Only consider single layer selection
-            selected_layer = self.viewer.layers.selection.active
-            if isinstance(selected_layer, napari.layers.Labels | napari.layers.Image):
-                self.layer = selected_layer
-            else:
-                self.layer = None
+    def _update_status(self) -> None:
+        """Update the button status and filename"""
 
-        self.split_time_points.setEnabled(
-            isinstance(self.layer, napari.layers.Labels | napari.layers.Image)
-            and self.layer.data.ndim >= 3
-        )
-        self.save_btn.setEnabled(
-            isinstance(self.layer, napari.layers.Labels | napari.layers.Image)
-        )
+        active = self.layer is not None
 
-        self.update_filename()
-
-    def update_filename(self) -> None:
-        """Update the default filename"""
-
-        if isinstance(self.layer, napari.layers.Labels | napari.layers.Image):
+        self.split_time_points.setEnabled(active and self.layer.data.ndim >= 3)
+        self.save_btn.setEnabled(active)
+        if active:
             self.filename.setText(self.layer.name)
 
     def _save_labels(self) -> None:
@@ -137,7 +125,17 @@ class SaveLabelsWidget(QWidget):
         use_compression = self.use_compression.isChecked()
         filename = self.filename.text()
 
-        destination = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        if not outputdir:
+            return
+
+        outputdir = os.path.join(
+            outputdir,
+            remove_invalid_chars(filename),
+        )
+        while os.path.exists(outputdir):
+            outputdir = outputdir + "_1"
+        os.mkdir(outputdir)
 
         if ndim >= 3 and split_time_points:
             for i in range(data.shape[0]):
@@ -149,7 +147,7 @@ class SaveLabelsWidget(QWidget):
                 tifffile.imwrite(
                     (
                         os.path.join(
-                            destination,
+                            outputdir,
                             (
                                 filename.split(".tif")[0]
                                 + "_TP"
@@ -164,7 +162,7 @@ class SaveLabelsWidget(QWidget):
 
         else:
             tifffile.imwrite(
-                os.path.join(destination, (filename + ".tif")),
+                os.path.join(outputdir, (filename + ".tif")),
                 data.astype(dtype),
                 compression="zstd" if use_compression else None,
             )

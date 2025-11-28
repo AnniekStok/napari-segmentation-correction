@@ -1,6 +1,6 @@
 import napari
 import numpy as np
-from PyQt5.QtCore import pyqtSignal
+from psygnal import Signal
 from qtpy.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
@@ -9,20 +9,23 @@ from qtpy.QtWidgets import (
     QLabel,
     QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 
+from napari_segmentation_correction.helpers.base_tool_widget import BaseToolWidget
 
-class DimensionWidget(QWidget):
+
+class DimensionWidget(BaseToolWidget):
     """QWidget to display and edit dimension information."""
 
-    dims_updated = pyqtSignal()  # signal to emit when dims change
+    update_dims = Signal()
 
-    def __init__(self, viewer: napari.Viewer):
-        super().__init__()
-        self.viewer = viewer
+    def __init__(
+        self,
+        viewer: napari.Viewer,
+        layer_type=(napari.layers.Labels, napari.layers.Image),
+    ):
+        super().__init__(viewer, layer_type)
 
-        self.layer = None
         self.row_active = [False] * 5
 
         dim_box = QGroupBox("Dimensions")
@@ -86,25 +89,14 @@ class DimensionWidget(QWidget):
         self.setLayout(layout)
 
         # Connect to viewer signal to update the active layer.
-        self.viewer.layers.selection.events.active.connect(self._on_selection_changed)
-
-    def _on_selection_changed(self, event=None) -> None:
-        """Update the active layer"""
-
-        if (
-            len(self.viewer.layers.selection) == 1
-        ):  # Only consider single layer selection
-            selected_layer = self.viewer.layers.selection.active
-            if isinstance(selected_layer, napari.layers.Labels | napari.layers.Image):
-                self.layer = selected_layer
-                self._update_dimensions()
-            else:
-                self.layer = None
+        self.update_status.connect(self._update_dimensions)
 
     def _update_dimensions(self) -> None:
         """Update the dimension names, order, and scaling. Dimensions are always ordered
         in CTZYX order."""
 
+        if self.layer is None:
+            return
         ndim = self.layer.data.ndim
 
         if "dimension_info" in self.layer.metadata:
@@ -144,7 +136,7 @@ class DimensionWidget(QWidget):
             self.apply_dims()
         else:
             self.update_apply_button_state()
-            self.dims_updated.emit()
+            self.update_dims.emit()
 
     def update_apply_button_state(self) -> None:
         """Check if the current dimensions are valid (must include Y,X, no duplicate axes)"""

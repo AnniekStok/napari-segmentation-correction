@@ -12,9 +12,6 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
-)
 from napari_segmentation_correction.layer_controls import LayerControlsWidget
 from napari_segmentation_correction.plot_widget import PlotWidget
 from napari_segmentation_correction.regionprops_widget import RegionPropsWidget
@@ -34,11 +31,8 @@ class LabelToolbox(QWidget):
         self.tab_widget = QTabWidget(self)
         self.option_labels = None
 
-        ### Add label manager
-        self.label_manager = LayerManager(self.viewer)
-
         ### Add layer controls widget
-        self.layer_controls = LayerControlsWidget(self.viewer, self.label_manager)
+        self.layer_controls = LayerControlsWidget(self.viewer)
 
         ### activate orthogonal views and register custom function
         def label_options_click_hook(orig_layer, copied_layer):
@@ -59,21 +53,26 @@ class LabelToolbox(QWidget):
         self.tab_widget.setCurrentIndex(1)
 
         ### add combined tool widgets
-        self.edit_widgets = ToolWidgets(self.viewer, self.label_manager)
+        self.edit_widgets = ToolWidgets(self.viewer)
         scroll_area = QScrollArea()
         scroll_area.setWidget(self.edit_widgets)
         scroll_area.setWidgetResizable(True)
         self.tab_widget.addTab(scroll_area, "Tools")
 
         ### Add widget for regionproperties
-        self.regionprops_widget = RegionPropsWidget(self.viewer, self.label_manager)
+        self.regionprops_widget = RegionPropsWidget(self.viewer)
         props_scroll_area = QScrollArea()
         props_scroll_area.setWidget(self.regionprops_widget)
         props_scroll_area.setWidgetResizable(True)
         self.tab_widget.addTab(props_scroll_area, "Region properties")
 
+        # connect dimension widget signal to regionprops widget
+        self.layer_controls.update_dims.connect(
+            self.regionprops_widget.update_properties
+        )
+
         ### Add widget for displaying plot with regionprops
-        self.plot_widget = PlotWidget(self.label_manager)
+        self.plot_widget = PlotWidget(self.viewer)
         self.tab_widget.addTab(self.plot_widget, "Plot")
 
         # Add the tab widget to the main layout

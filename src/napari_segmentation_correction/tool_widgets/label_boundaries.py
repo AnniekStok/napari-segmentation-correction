@@ -7,10 +7,10 @@ from qtpy.QtWidgets import (
 )
 from skimage.segmentation import find_boundaries
 
+from napari_segmentation_correction.helpers.base_tool_widget import BaseToolWidget
 from napari_segmentation_correction.helpers.process_actions_helpers import (
     process_action_seg,
 )
-from napari_segmentation_correction.tool_widgets.base_tool_widget import BaseToolWidget
 
 
 def compute_boundaries(seg: np.ndarray) -> np.ndarray:

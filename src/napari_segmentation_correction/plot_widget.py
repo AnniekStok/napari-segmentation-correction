@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import napari
 from matplotlib.backends.backend_qt5agg import (
     FigureCanvas,
     NavigationToolbar2QT,
@@ -11,21 +12,18 @@ from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QComboBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
-)
+from napari_segmentation_correction.helpers.base_tool_widget import BaseToolWidget
 
 ICON_ROOT = Path(__file__).parent / "icons"
 
 
-class PlotWidget(QWidget):
+class PlotWidget(BaseToolWidget):
     """Matplotlib widget that displays features of the selected labels layer"""
 
-    def __init__(self, label_manager: LayerManager):
-        super().__init__()
+    def __init__(self, viewer, layer_type=(napari.layers.Labels)):
+        super().__init__(viewer, layer_type)
 
-        self.label_manager = label_manager
-        self.label_manager.layer_update.connect(self._layer_update)
+        self.update_status.connect(self._layer_update)
 
         # Main plot.
         self.fig = plt.figure(constrained_layout=True)
@@ -89,16 +87,10 @@ class PlotWidget(QWidget):
     def _layer_update(self) -> None:
         """Connect events to plot updates"""
 
-        if self.label_manager.selected_layer is not None:
-            self.label_manager.selected_layer.events.show_selected_label.connect(
-                self._update_plot
-            )
-            self.label_manager.selected_layer.events.selected_label.connect(
-                self._update_plot
-            )
-            self.label_manager.selected_layer.events.features.connect(
-                self._update_dropdown
-            )
+        if self.layer is not None:
+            self.layer.events.show_selected_label.connect(self._update_plot)
+            self.layer.events.selected_label.connect(self._update_plot)
+            self.layer.events.features.connect(self._update_dropdown)
 
         self._update_dropdown()
         self._update_plot()
@@ -106,10 +98,7 @@ class PlotWidget(QWidget):
     def _update_dropdown(self) -> None:
         """Update the dropdowns with the column headers"""
 
-        if (
-            self.label_manager.selected_layer is not None
-            and len(self.label_manager.selected_layer.features) > 0
-        ):
+        if self.layer is not None and len(self.layer.features) > 0:
             # temporarily disconnect listening to updates in the comboboxes
             self.x_combo.currentIndexChanged.disconnect(self._update_plot)
             self.y_combo.currentIndexChanged.disconnect(self._update_plot)
@@ -118,22 +107,14 @@ class PlotWidget(QWidget):
             prev_index = self.x_combo.currentIndex() if self.x_combo.count() > 0 else 0
             self.x_combo.clear()
             self.x_combo.addItems(
-                [
-                    item
-                    for item in self.label_manager.selected_layer.features.columns
-                    if item != "index"
-                ]
+                [item for item in self.layer.features.columns if item != "index"]
             )
             self.x_combo.setCurrentIndex(prev_index)
 
             prev_index = self.y_combo.currentIndex() if self.y_combo.count() > 0 else 1
             self.y_combo.clear()
             self.y_combo.addItems(
-                [
-                    item
-                    for item in self.label_manager.selected_layer.features.columns
-                    if item != "index"
-                ]
+                [item for item in self.layer.features.columns if item != "index"]
             )
             self.y_combo.setCurrentIndex(prev_index)
 
@@ -142,11 +123,7 @@ class PlotWidget(QWidget):
             )
             self.group_combo.clear()
             self.group_combo.addItems(
-                [
-                    item
-                    for item in self.label_manager.selected_layer.features.columns
-                    if item != "index"
-                ]
+                [item for item in self.layer.features.columns if item != "index"]
             )
             self.group_combo.setCurrentIndex(prev_index)
 
@@ -173,23 +150,23 @@ class PlotWidget(QWidget):
         self.ax.autoscale_view()  # Update the view to include the new limits
 
         if (
-            self.label_manager.selected_layer is not None
-            and len(self.label_manager.selected_layer.features) > 0
+            self.layer is not None
+            and len(self.layer.features) > 0
             and (x_axis_property != "" and y_axis_property != "" and group != "")
         ):
             if group == "label":
-                if self.label_manager.selected_layer.show_selected_label:
-                    label = self.label_manager.selected_layer.selected_label
-                    plotting_data = self.label_manager.selected_layer.features[
-                        self.label_manager.selected_layer.features["label"] == label
+                if self.layer.show_selected_label:
+                    label = self.layer.selected_label
+                    plotting_data = self.layer.features[
+                        self.layer.features["label"] == label
                     ]
                     unique_labels = [label]
                 else:
-                    plotting_data = self.label_manager.selected_layer.features
+                    plotting_data = self.layer.features
                     unique_labels = plotting_data["label"].unique()
 
                 # Create consistent label-to-color mapping
-                colormap = self.label_manager.selected_layer.colormap
+                colormap = self.layer.colormap
                 label_colors = {
                     label: to_rgb(colormap.map(label)) for label in unique_labels
                 }
@@ -222,9 +199,9 @@ class PlotWidget(QWidget):
             else:
                 # Continuous colormap for other grouping
                 self.ax.scatter(
-                    self.label_manager.selected_layer.features[x_axis_property],
-                    self.label_manager.selected_layer.features[y_axis_property],
-                    c=self.label_manager.selected_layer.features[group],
+                    self.layer.features[x_axis_property],
+                    self.layer.features[y_axis_property],
+                    c=self.layer.features[group],
                     cmap="summer",
                     s=10,
                 )

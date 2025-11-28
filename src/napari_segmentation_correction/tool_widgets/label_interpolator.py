@@ -13,10 +13,10 @@ from qtpy.QtWidgets import (
 from scipy.ndimage import distance_transform_edt
 from skimage.io import imread
 
+from napari_segmentation_correction.helpers.base_tool_widget import BaseToolWidget
 from napari_segmentation_correction.helpers.process_actions_helpers import (
     remove_invalid_chars,
 )
-from napari_segmentation_correction.tool_widgets.base_tool_widget import BaseToolWidget
 
 
 def signed_distance_transform(mask: np.ndarray) -> np.ndarray:

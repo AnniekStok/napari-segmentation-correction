@@ -10,10 +10,10 @@ from qtpy.QtWidgets import (
 )
 from skimage.measure import label, regionprops_table
 
+from napari_segmentation_correction.helpers.base_tool_widget import BaseToolWidget
 from napari_segmentation_correction.helpers.process_actions_helpers import (
     process_action_seg,
 )
-from napari_segmentation_correction.tool_widgets.base_tool_widget import BaseToolWidget
 
 
 def keep_largest_cluster(img: np.ndarray) -> np.ndarray:

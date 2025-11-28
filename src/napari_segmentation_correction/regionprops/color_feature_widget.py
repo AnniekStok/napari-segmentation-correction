@@ -5,28 +5,22 @@ from qtpy.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QPushButton,
-    QWidget,
 )
 from skimage.util import map_array
 
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
-)
+from napari_segmentation_correction.helpers.base_tool_widget import BaseToolWidget
 
 
-class ColorFeatureWidget(QWidget):
+class ColorFeatureWidget(BaseToolWidget):
     """Widget to produce images colored by property."""
 
     def __init__(
-        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
+        self, viewer: "napari.viewer.Viewer", layer_type=(napari.layers.Labels)
     ) -> None:
-        super().__init__()
-
-        self.viewer = viewer
-        self.label_manager = label_manager
+        super().__init__(viewer, layer_type)
 
         self.property = QComboBox()
-        self.label_manager.layer_update.connect(self.set_properties)
+        self.update_status.connect(self.set_properties)
 
         self.run_btn = QPushButton("Run")
         self.run_btn.clicked.connect(self._color_by_feature)
@@ -47,8 +41,8 @@ class ColorFeatureWidget(QWidget):
         """Retrieve the available properties and populate the dropdown menu"""
 
         current_prop = self.property.currentText()
-        if self.label_manager.selected_layer is not None:
-            props = list(self.label_manager.selected_layer.properties.keys())
+        if self.layer is not None:
+            props = list(self.layer.properties.keys())
             self.property.clear()
             self.property.addItems(
                 [p for p in props if p not in ("label", "time_point")]
@@ -67,10 +61,8 @@ class ColorFeatureWidget(QWidget):
 
         feature = self.property.currentText()
         image = map_array(
-            self.label_manager.selected_layer.data,
-            self.label_manager.selected_layer.properties["label"],
-            self.label_manager.selected_layer.properties[feature],
+            self.layer.data,
+            self.layer.properties["label"],
+            self.layer.properties[feature],
         ).astype(np.float32)
-        self.viewer.add_image(
-            image, colormap="turbo", scale=self.label_manager.selected_layer.scale
-        )
+        self.viewer.add_image(image, colormap="turbo", scale=self.layer.scale)

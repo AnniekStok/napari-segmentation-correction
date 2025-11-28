@@ -54,6 +54,7 @@ class ColoredTableWidget(QWidget):
         self._table_widget = CustomTableWidget()
 
         self._layer.events.colormap.connect(self._set_label_colors_to_rows)
+        self._layer.events.show_selected_label.connect(self._set_label_colors_to_rows)
         if hasattr(layer, "properties"):
             self._set_data(layer.properties)
         else:
@@ -115,7 +116,7 @@ class ColoredTableWidget(QWidget):
 
         for i in range(self._table_widget.rowCount()):
             label = self._table["label"][i]
-            label_color = to_rgb(self._layer.get_color(label))
+            label_color = to_rgb(self._layer.colormap.map(label))
             scaled_color = (
                 int(label_color[0] * 255),
                 int(label_color[1] * 255),

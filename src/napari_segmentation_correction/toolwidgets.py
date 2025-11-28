@@ -4,9 +4,6 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
-)
 from napari_segmentation_correction.tool_widgets.connected_components import (
     ConnectedComponents,
 )
@@ -28,12 +25,9 @@ from napari_segmentation_correction.tool_widgets.threshold_widget import Thresho
 class ToolWidgets(QWidget):
     """Toolbox widgets for editing labels"""
 
-    def __init__(
-        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
-    ) -> None:
+    def __init__(self, viewer: "napari.viewer.Viewer") -> None:
         super().__init__()
         self.viewer = viewer
-        self.label_manager = label_manager
 
         self.edit_layout = QVBoxLayout()
 

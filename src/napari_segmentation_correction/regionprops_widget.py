@@ -11,14 +11,11 @@ from qtpy.QtWidgets import (
     QMessageBox,
     QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 from tqdm import tqdm
 
+from napari_segmentation_correction.helpers.base_tool_widget import BaseToolWidget
 from napari_segmentation_correction.helpers.layer_dropdown import LayerDropdown
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
-)
 from napari_segmentation_correction.regionprops.color_feature_widget import (
     ColorFeatureWidget,
 )
@@ -151,18 +148,16 @@ shape_properties = [
 ]
 
 
-class RegionPropsWidget(QWidget):
+class RegionPropsWidget(BaseToolWidget):
     """Widget to compute region properties, display a table, and allow the user to color
     labels by feature and to filter by feature.
     """
 
     def __init__(
-        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
+        self, viewer: "napari.viewer.Viewer", layer_type=(napari.layers.Labels)
     ) -> None:
-        super().__init__()
+        super().__init__(viewer, layer_type)
 
-        self.viewer = viewer
-        self.label_manager = label_manager
         self.table = None
         self.ndims = 2
         self.feature_dims = 2
@@ -214,13 +209,11 @@ class RegionPropsWidget(QWidget):
         self.measure_btn.setEnabled(False)
 
         ### Add widget for property filtering
-        self.prop_filter_widget = PropertyFilterWidget(self.viewer, self.label_manager)
+        self.prop_filter_widget = PropertyFilterWidget(self.viewer)
         self.prop_filter_widget.setVisible(False)
 
         ### Add widget to color by feature
-        self.color_by_feature_widget = ColorFeatureWidget(
-            self.viewer, self.label_manager
-        )
+        self.color_by_feature_widget = ColorFeatureWidget(self.viewer)
         self.color_by_feature_widget.setVisible(False)
 
         # Add table layout
@@ -245,8 +238,8 @@ class RegionPropsWidget(QWidget):
         self.setLayout(layout)
 
         # connect to update signal
-        self.label_manager.layer_update.connect(self._update_properties)
-        self._update_properties()
+        self.update_status.connect(self.update_properties)
+        self.update_properties()
 
     def _update_measure_btn_state(self, state: int | None = None):
         """Update the button state according to whether at least one checkbox is checked"""
@@ -261,16 +254,11 @@ class RegionPropsWidget(QWidget):
             checked
         ) > 0 else self.measure_btn.setEnabled(False)
 
-    def _update_properties(self) -> None:
+    def update_properties(self) -> None:
         """Update the available properties based on the selected label layer dimensions"""
 
-        if (
-            self.label_manager.selected_layer is not None
-            and "dimension_info" in self.label_manager.selected_layer.metadata
-        ):
-            _, axes_labels, _ = self.label_manager.selected_layer.metadata[
-                "dimension_info"
-            ]
+        if self.layer is not None and "dimension_info" in self.layer.metadata:
+            _, axes_labels, _ = self.layer.metadata["dimension_info"]
             self.feature_dims = 3 if "Z" in axes_labels else 2
         else:
             self.feature_dims = 2
@@ -279,10 +267,7 @@ class RegionPropsWidget(QWidget):
         visible_props = [
             prop["region_prop_name"]
             for prop in intensity_properties + shape_properties
-            if (
-                self.feature_dims in prop["dims"]
-                and self.label_manager.selected_layer is not None
-            )
+            if (self.feature_dims in prop["dims"] and self.layer is not None)
         ]
         for checkbox_dict in self.checkboxes:
             prop = checkbox_dict["region_prop_name"]
@@ -290,11 +275,9 @@ class RegionPropsWidget(QWidget):
             checkbox_dict["checkbox"].setVisible(visible)
             checkbox_dict["checkbox"].setEnabled(visible)
 
-        self.intensity_image_dropdown.setVisible(
-            self.label_manager.selected_layer is not None
-        )
+        self.intensity_image_dropdown.setVisible(self.layer is not None)
 
-        if hasattr(self.label_manager.selected_layer, "properties"):
+        if hasattr(self.layer, "properties"):
             self._update_table()
 
         self._update_measure_btn_state()
@@ -314,9 +297,7 @@ class RegionPropsWidget(QWidget):
     def _measure(self):
         """Measure the selected region properties and update the table."""
 
-        _, axes_labels, spacing = self.label_manager.selected_layer.metadata[
-            "dimension_info"
-        ]
+        _, axes_labels, spacing = self.layer.metadata["dimension_info"]
         self.use_z = "Z" in axes_labels
         self.ndims = len(axes_labels)
         spacing = [
@@ -334,7 +315,7 @@ class RegionPropsWidget(QWidget):
         else:
             intensity_image = None
 
-        data = self.label_manager.selected_layer.data
+        data = self.layer.data
         if intensity_image is not None and intensity_image.shape != data.shape:
             # if shapes don't match, try to transpose the data such that the order is
             # correct. Multichannel intensity images are allowed as long as the channel
@@ -347,7 +328,7 @@ class RegionPropsWidget(QWidget):
                 msg = QMessageBox()
                 msg.setWindowTitle("Shape mismatch")
                 msg.setText(
-                    f"Label layer and intensity image must have compatible shapees. Got {self.label_manager.selected_layer.data.shape} and {intensity_image.shape}."
+                    f"Label layer and intensity image must have compatible shapees. Got {self.layer.data.shape} and {intensity_image.shape}."
                 )
                 msg.setIcon(QMessageBox.Critical)
                 msg.setStandardButtons(QMessageBox.Ok)
@@ -381,8 +362,8 @@ class RegionPropsWidget(QWidget):
                 else:
                     props = pd.concat([props, props_slice], ignore_index=True)
 
-        if hasattr(self.label_manager.selected_layer, "properties"):
-            self.label_manager.selected_layer.properties = props
+        if hasattr(self.layer, "properties"):
+            self.layer.properties = props
             self.prop_filter_widget.set_properties()
             self.color_by_feature_widget.set_properties()
             self._update_table()
@@ -395,12 +376,10 @@ class RegionPropsWidget(QWidget):
             self.color_by_feature_widget.setVisible(False)
         if (
             self.viewer is not None
-            and self.label_manager.selected_layer is not None
-            and len(self.label_manager.selected_layer.properties) > 0
+            and self.layer is not None
+            and len(self.layer.properties) > 0
         ):
-            self.table = ColoredTableWidget(
-                self.label_manager.selected_layer, self.viewer
-            )
+            self.table = ColoredTableWidget(self.layer, self.viewer)
             self.table.setMinimumWidth(500)
             self.regionprops_layout.addWidget(self.table)
             self.prop_filter_widget.setVisible(True)

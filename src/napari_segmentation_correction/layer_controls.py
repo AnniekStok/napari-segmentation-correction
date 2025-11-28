@@ -1,5 +1,6 @@
 import napari
 from napari_plane_sliders import PlaneSliderWidget
+from psygnal import Signal
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QGroupBox,
@@ -7,14 +8,14 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from napari_segmentation_correction.layer_control_widgets.convert_to_numpy import (
+    ConvertToNumpyWidget,
+)
 from napari_segmentation_correction.layer_control_widgets.copy_label_widget import (
     CopyLabelWidget,
 )
 from napari_segmentation_correction.layer_control_widgets.dimension_widget import (
     DimensionWidget,
-)
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
 )
 from napari_segmentation_correction.layer_control_widgets.save_labels_widget import (
     SaveLabelsWidget,
@@ -25,22 +26,22 @@ class LayerControlsWidget(QWidget):
     """Widgets for additional layer controls, including setting layer dimensions, plane
     sliders, copy-pasting between layers, and saving layer data in different formats."""
 
-    def __init__(
-        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
-    ) -> None:
+    update_dims = Signal()
+
+    def __init__(self, viewer: "napari.viewer.Viewer") -> None:
         super().__init__()
 
         self.viewer = viewer
-        self.label_manager = label_manager
 
         layout = QVBoxLayout()
 
-        ### create the dropdown for selecting label images
-        layout.addWidget(self.label_manager)
+        ### option to convert dask array to in memory numpy array
+        self.convert_to_numpy_widget = ConvertToNumpyWidget(self.viewer)
+        layout.addWidget(self.convert_to_numpy_widget)
 
         ### layer dimensions
         self.dimension_widget = DimensionWidget(self.viewer)
-        self.dimension_widget.dims_updated.connect(self._update_dims)
+        self.dimension_widget.update_dims.connect(self.update_dims)  # forward signal
         layout.addWidget(self.dimension_widget)
 
         ### plane sliders
@@ -62,10 +63,3 @@ class LayerControlsWidget(QWidget):
         layout.setAlignment(Qt.AlignTop)
 
         self.setLayout(layout)
-
-    def _update_dims(self) -> None:
-        """If the current layer is the selected labels layer, emit update signal to notify
-        the regionprops widget to update its properties."""
-
-        if self.dimension_widget.layer == self.label_manager.selected_layer:
-            self.label_manager.layer_update.emit()

@@ -6,9 +6,6 @@ import numpy as np
 from napari_builtins.io._read import (
     magic_imread,
 )
-from qtpy.QtWidgets import (
-    QGroupBox,
-)
 
 from napari_segmentation_correction.layer_control_widgets import (
     ConvertToNumpyWidget,
@@ -17,6 +14,7 @@ from napari_segmentation_correction.layer_control_widgets import (
     SaveLabelsWidget,
 )
 from napari_segmentation_correction.layer_controls import LayerControlsWidget
+from napari_segmentation_correction.plane_slider_widget import PlaneSliderWidget
 
 
 def test_layer_controls_widget(make_napari_viewer, qtbot):
@@ -35,7 +33,7 @@ def test_layer_controls_widget(make_napari_viewer, qtbot):
 
     assert isinstance(top_widgets[0], ConvertToNumpyWidget)
     assert isinstance(top_widgets[1], DimensionWidget)
-    assert isinstance(top_widgets[2], QGroupBox)  # plane sliders
+    assert isinstance(top_widgets[2], PlaneSliderWidget)  # plane sliders
     assert isinstance(top_widgets[3], CopyLabelWidget)
     assert isinstance(top_widgets[4], SaveLabelsWidget)
 

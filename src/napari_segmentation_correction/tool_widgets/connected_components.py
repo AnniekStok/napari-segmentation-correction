@@ -7,16 +7,13 @@ from qtpy.QtWidgets import (
     QGroupBox,
     QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 from skimage.measure import label, regionprops_table
 
 from napari_segmentation_correction.helpers.process_actions_helpers import (
     process_action_seg,
 )
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
-)
+from napari_segmentation_correction.tool_widgets.base_tool_widget import BaseToolWidget
 
 
 def keep_largest_cluster(img: np.ndarray) -> np.ndarray:
@@ -56,84 +53,74 @@ def connected_component_labeling(img: np.ndarray) -> np.ndarray:
     return label(img)
 
 
-class ConnectedComponents(QWidget):
+class ConnectedComponents(BaseToolWidget):
     """Widget for various connected component analysis functions."""
 
     def __init__(
-        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
+        self, viewer: "napari.viewer.Viewer", layer_type=(napari.layers.Labels)
     ) -> None:
-        super().__init__()
+        super().__init__(viewer, layer_type)
 
-        self.viewer = viewer
-        self.label_manager = label_manager
-        self.outputdir = None
+        box = QGroupBox("Connected Component Analysis")
+        box_layout = QVBoxLayout()
 
-        conn_comp_box = QGroupBox("Connected Component Analysis")
-        conn_comp_box_layout = QVBoxLayout()
-
+        # connected components labeling
         self.conncomp_btn = QPushButton("Find connected components")
         self.conncomp_btn.setToolTip(
             "Run connected component analysis to (re)label the labels layer"
         )
         self.conncomp_btn.clicked.connect(self._conn_comp)
-        self.conncomp_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-        )
-        self.label_manager.layer_update.connect(self._update_button_state)
+        box_layout.addWidget(self.conncomp_btn)
 
-        conn_comp_box_layout.addWidget(self.conncomp_btn)
-
+        # keep the largest connected cluster of labels
         self.keep_largest_btn = QPushButton("Keep largest component cluster")
         self.keep_largest_btn.setToolTip(
             "Keep only the labels part of the largest non-zero connected component"
         )
         self.keep_largest_btn.clicked.connect(self._keep_largest_cluster)
-        self.keep_largest_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-        )
-        conn_comp_box_layout.addWidget(self.keep_largest_btn)
+        box_layout.addWidget(self.keep_largest_btn)
 
+        # keep the largest fragment per label
         self.keep_largest_fragment_btn = QPushButton("Keep largest fragment per label")
         self.keep_largest_fragment_btn.setToolTip(
             "For each label, keep only the largest connected fragment"
         )
         self.keep_largest_fragment_btn.clicked.connect(self._keep_largest_fragment)
-        self.keep_largest_fragment_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-        )
-        conn_comp_box_layout.addWidget(self.keep_largest_fragment_btn)
+        box_layout.addWidget(self.keep_largest_fragment_btn)
 
-        conn_comp_box.setLayout(conn_comp_box_layout)
+        # update button state
+        self._update_button_state()
+        self.update_status.connect(self._update_button_state)
+
+        box.setLayout(box_layout)
         main_layout = QVBoxLayout()
-        main_layout.addWidget(conn_comp_box)
+        main_layout.addWidget(box)
         self.setLayout(main_layout)
 
     def _update_button_state(self) -> None:
-        self.conncomp_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-        )
-        self.keep_largest_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-        )
-        self.keep_largest_fragment_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-        )
+        """Activate/deactivate the buttons according to whether the current layer is of
+        the correct type."""
+
+        state = self.layer is not None
+        self.conncomp_btn.setEnabled(state)
+        self.keep_largest_btn.setEnabled(state)
+        self.keep_largest_fragment_btn.setEnabled(state)
 
     def _keep_largest_cluster(self) -> None:
         """Keep only the labels part of the largest non-zero connected component"""
 
         action = keep_largest_cluster
         largest_cluster = process_action_seg(
-            self.label_manager.selected_layer.data,
+            self.layer.data,
             action,
-            basename=self.label_manager.selected_layer.name,
+            basename=self.layer.name,
         )
 
         if largest_cluster is not None:
-            self.label_manager.selected_layer = self.viewer.add_labels(
+            self.layer = self.viewer.add_labels(
                 largest_cluster,
-                name=self.label_manager.selected_layer.name + "_largest_cluster",
-                scale=self.label_manager.selected_layer.scale,
+                name=self.layer.name + "_largest_cluster",
+                scale=self.layer.scale,
             )
 
     def _keep_largest_fragment(self) -> None:
@@ -141,32 +128,31 @@ class ConnectedComponents(QWidget):
 
         action = keep_largest_fragment_per_label
         largest_frags = process_action_seg(
-            self.label_manager.selected_layer.data,
+            self.layer.data,
             action,
-            basename=self.label_manager.selected_layer.name,
+            basename=self.layer.name,
         )
 
         if largest_frags is not None:
-            self.label_manager.selected_layer = self.viewer.add_labels(
+            self.layer = self.viewer.add_labels(
                 largest_frags,
-                name=self.label_manager.selected_layer.name
-                + "_largest_fragment_per_label",
-                scale=self.label_manager.selected_layer.scale,
+                name=self.layer.name + "_largest_fragment",
+                scale=self.layer.scale,
             )
 
     def _conn_comp(self) -> None:
-        """Run connected component analysis to (re) label the labels array"""
+        """Run connected component analysis to (re)label the labels array"""
 
         action = connected_component_labeling
         conncomp = process_action_seg(
-            self.label_manager.selected_layer.data,
+            self.layer.data,
             action,
-            basename=self.label_manager.selected_layer.name,
+            basename=self.layer.name,
         )
 
         if conncomp is not None:
-            self.label_manager.selected_layer = self.viewer.add_labels(
+            self.layer = self.viewer.add_labels(
                 conncomp,
-                name=self.label_manager.selected_layer.name + "_conncomp",
-                scale=self.label_manager.selected_layer.scale,
+                name=self.layer.name + "_conncomp",
+                scale=self.layer.scale,
             )

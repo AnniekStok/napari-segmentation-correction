@@ -7,7 +7,6 @@ from qtpy.QtWidgets import (
     QPushButton,
     QSpinBox,
     QVBoxLayout,
-    QWidget,
 )
 from scipy import ndimage
 from scipy.ndimage import binary_erosion
@@ -16,9 +15,7 @@ from skimage.segmentation import expand_labels
 from napari_segmentation_correction.helpers.process_actions_helpers import (
     process_action_seg,
 )
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
-)
+from napari_segmentation_correction.tool_widgets.base_tool_widget import BaseToolWidget
 
 
 def erode_labels(img: np.ndarray, diam: int, iterations: int) -> np.ndarray:
@@ -49,20 +46,16 @@ def expand_labels_skimage(img: np.ndarray, diam: int, iterations: int) -> np.nda
     return expanded_labels
 
 
-class ErosionDilationWidget(QWidget):
+class ErosionDilationWidget(BaseToolWidget):
     """Widget to perform erosion/dilation on label images"""
 
     def __init__(
-        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
+        self, viewer: "napari.viewer.Viewer", layer_type=(napari.layers.Labels)
     ) -> None:
-        super().__init__()
+        super().__init__(viewer, layer_type)
 
-        self.viewer = viewer
-        self.label_manager = label_manager
-        self.outputdir = None
-
-        dil_erode_box = QGroupBox("Erode/dilate labels")
-        dil_erode_box_layout = QVBoxLayout()
+        box = QGroupBox("Erode/dilate labels")
+        box_layout = QVBoxLayout()
 
         radius_layout = QHBoxLayout()
         str_element_diameter_label = QLabel("Structuring element diameter")
@@ -82,80 +75,59 @@ class ErosionDilationWidget(QWidget):
         iterations_layout.addWidget(iterations_label)
         iterations_layout.addWidget(self.iterations)
 
-        shrink_dilate_buttons_layout = QHBoxLayout()
+        erode_expand_buttons_layout = QHBoxLayout()
         self.erode_btn = QPushButton("Erode")
         self.dilate_btn = QPushButton("Dilate")
-        self.erode_btn.clicked.connect(self._erode_labels)
-        self.dilate_btn.clicked.connect(self._dilate_labels)
-        shrink_dilate_buttons_layout.addWidget(self.erode_btn)
-        shrink_dilate_buttons_layout.addWidget(self.dilate_btn)
+        self.erode_btn.clicked.connect(lambda: self._erode_dilate_labels(erode=True))
+        self.dilate_btn.clicked.connect(lambda: self.erode_dilate_labels(erode=False))
+        erode_expand_buttons_layout.addWidget(self.erode_btn)
+        erode_expand_buttons_layout.addWidget(self.dilate_btn)
 
-        self.erode_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-        )
-        self.label_manager.layer_update.connect(
-            lambda: self.erode_btn.setEnabled(
-                isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-            )
-        )
-        self.dilate_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-        )
-        self.label_manager.layer_update.connect(
-            lambda: self.dilate_btn.setEnabled(
-                isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-            )
-        )
+        self.erode_btn.setEnabled(self.layer is not None)
+        self.dilate_btn.setEnabled(self.layer is not None)
+        self.update_status.connect(self._update_buttons)
 
-        dil_erode_box_layout.addLayout(radius_layout)
-        dil_erode_box_layout.addLayout(iterations_layout)
-        dil_erode_box_layout.addLayout(shrink_dilate_buttons_layout)
+        box_layout.addLayout(radius_layout)
+        box_layout.addLayout(iterations_layout)
+        box_layout.addLayout(erode_expand_buttons_layout)
 
-        dil_erode_box.setLayout(dil_erode_box_layout)
+        box.setLayout(box_layout)
 
         layout = QVBoxLayout()
-        layout.addWidget(dil_erode_box)
+        layout.addWidget(box)
         self.setLayout(layout)
 
-    def _erode_labels(self) -> None:
-        """Shrink oversized labels through erosion"""
+    def _update_buttons(self):
+        """Update button state"""
 
-        diam = self.structuring_element_diameter.value()
-        iterations = self.iterations.value()
-        action = erode_labels
-        eroded = process_action_seg(
-            seg=self.label_manager.selected_layer.data,
-            action=action,
-            basename=self.label_manager.selected_layer.name,
-            diam=diam,
-            iterations=iterations,
-        )
+        enabled = self.layer is not None
+        self.erode_btn.setEnabled(enabled)
+        self.dilate_btn.setEnabled(enabled)
 
-        if eroded is not None:
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                eroded,
-                name=self.label_manager.selected_layer.name + "_eroded",
-                scale=self.label_manager.selected_layer.scale,
-            )
-
-    def _dilate_labels(self) -> None:
-        """Dilate labels in the selected layer."""
+    def _erode_dilate_labels(self, erode: bool) -> None:
+        """Shrink labels through erosion or dilate by expansion"""
 
         diam = self.structuring_element_diameter.value()
         iterations = self.iterations.value()
 
-        action = expand_labels_skimage
-        expanded = process_action_seg(
-            seg=self.label_manager.selected_layer.data,
+        if erode:
+            name = self.layer.name + "_eroded"
+            action = erode_labels
+        else:
+            name = self.layer.name + "_dilated"
+            action = expand_labels_skimage
+
+        result = process_action_seg(
+            seg=self.layer.data,
             action=action,
-            basename=self.label_manager.selected_layer.name,
+            basename=self.layer.name,
             diam=diam,
             iterations=iterations,
         )
 
-        if expanded is not None:
-            self.label_manager.selected_layer = self.viewer.add_labels(
-                expanded,
-                name=self.label_manager.selected_layer.name + "_expanded",
-                scale=self.label_manager.selected_layer.scale,
+        if result is not None:
+            self.layer = self.viewer.add_labels(
+                result,
+                name=name,
+                scale=self.layer.scale,
             )

@@ -174,24 +174,22 @@ class ImageCalculator(QWidget):
 
         self.viewer = viewer
 
-        ### Add one image to another
-        image_calc_box = QGroupBox("Image Calculator")
-        image_calc_box_layout = QVBoxLayout()
+        box = QGroupBox("Image Calculator")
+        box_layout = QVBoxLayout()
 
         image1_layout = QHBoxLayout()
         image1_layout.addWidget(QLabel("Label image 1"))
         self.image1_dropdown = LayerDropdown(self.viewer, (Image, Labels))
         self.image1_dropdown.layer_changed.connect(self._update_image1)
         image1_layout.addWidget(self.image1_dropdown)
+        box_layout.addLayout(image1_layout)
 
         image2_layout = QHBoxLayout()
         image2_layout.addWidget(QLabel("Label image 2"))
         self.image2_dropdown = LayerDropdown(self.viewer, (Image, Labels))
         self.image2_dropdown.layer_changed.connect(self._update_image2)
         image2_layout.addWidget(self.image2_dropdown)
-
-        image_calc_box_layout.addLayout(image1_layout)
-        image_calc_box_layout.addLayout(image2_layout)
+        box_layout.addLayout(image2_layout)
 
         operation_layout = QHBoxLayout()
         self.operation = QComboBox()
@@ -203,38 +201,39 @@ class ImageCalculator(QWidget):
         self.operation.addItem("OR")
         operation_layout.addWidget(QLabel("Operation"))
         operation_layout.addWidget(self.operation)
-        image_calc_box_layout.addLayout(operation_layout)
+        box_layout.addLayout(operation_layout)
 
         self.maintain_dtype = QCheckBox("Keep original data type")
         self.maintain_dtype.setToolTip(
-            "If checked, the result will retain the original data type and hold zeroes where the pixels would have had negative values. Otherwise, the data type will be updated if necessary to accomodate negative values."
+            "If checked, the result will retain the original data type and hold zeroes "
+            "where the pixels would have had negative values. Otherwise, the data type "
+            "will be updated if necessary to accomodate negative values."
         )
-        image_calc_box_layout.addWidget(self.maintain_dtype)
+        box_layout.addWidget(self.maintain_dtype)
 
-        add_images_btn = QPushButton("Run")
-        add_images_btn.clicked.connect(self._calculate_images)
-        add_images_btn.setEnabled(
+        run_btn = QPushButton("Run")
+        run_btn.clicked.connect(self._calculate_images)
+        run_btn.setEnabled(
             self.image1_dropdown.selected_layer is not None
             and self.image2_dropdown.selected_layer is not None
         )
         self.image1_dropdown.layer_changed.connect(
-            lambda: add_images_btn.setEnabled(
+            lambda: run_btn.setEnabled(
                 self.image1_dropdown.selected_layer is not None
                 and self.image2_dropdown.selected_layer is not None
             )
         )
         self.image2_dropdown.layer_changed.connect(
-            lambda: add_images_btn.setEnabled(
+            lambda: run_btn.setEnabled(
                 self.image1_dropdown.selected_layer is not None
                 and self.image2_dropdown.selected_layer is not None
             )
         )
 
-        image_calc_box_layout.addWidget(add_images_btn)
-
-        image_calc_box.setLayout(image_calc_box_layout)
+        box_layout.addWidget(run_btn)
+        box.setLayout(box_layout)
         main_layout = QVBoxLayout()
-        main_layout.addWidget(image_calc_box)
+        main_layout.addWidget(box)
         self.setLayout(main_layout)
 
     def _update_image1(self, selected_layer: str) -> None:
@@ -305,8 +304,18 @@ class ImageCalculator(QWidget):
             )
 
         if result is not None:
-            self.viewer.add_image(
-                result,
-                name=f"{self.image1_layer.name}_{self.image2_layer.name}_{self.operation.currentText()}",
-                scale=self.image1_layer.scale,
-            )
+            if np.issubdtype(result.dtype, np.integer) and (
+                isinstance(self.image1_layer, napari.layers.Labels)
+                and isinstance(self.image2_layer, napari.layers.Labels)
+            ):
+                self.viewer.add_labels(
+                    result,
+                    name=f"{self.image1_layer.name}_{self.image2_layer.name}_{self.operation.currentText()}",
+                    scale=self.image1_layer.scale,
+                )
+            else:
+                self.viewer.add_image(
+                    result,
+                    name=f"{self.image1_layer.name}_{self.image2_layer.name}_{self.operation.currentText()}",
+                    scale=self.image1_layer.scale,
+                )

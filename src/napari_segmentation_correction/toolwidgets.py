@@ -38,19 +38,19 @@ class ToolWidgets(QWidget):
         self.edit_layout = QVBoxLayout()
 
         ### Add widget for connected component labeling
-        conn_comp_widget = ConnectedComponents(self.viewer, self.label_manager)
+        conn_comp_widget = ConnectedComponents(self.viewer)
         self.edit_layout.addWidget(conn_comp_widget)
 
         ### Add widget for label boundaries
-        label_boundary_widget = LabelBoundaries(self.viewer, self.label_manager)
+        label_boundary_widget = LabelBoundaries(self.viewer)
         self.edit_layout.addWidget(label_boundary_widget)
 
         ### Add widget for smoothing labels
-        smooth_widget = SmoothingWidget(self.viewer, self.label_manager)
+        smooth_widget = SmoothingWidget(self.viewer)
         self.edit_layout.addWidget(smooth_widget)
 
         ### Add widget for eroding/dilating labels
-        erode_dilate_widget = ErosionDilationWidget(self.viewer, self.label_manager)
+        erode_dilate_widget = ErosionDilationWidget(self.viewer)
         self.edit_layout.addWidget(erode_dilate_widget)
 
         ### Threshold image
@@ -66,7 +66,7 @@ class ToolWidgets(QWidget):
         self.edit_layout.addWidget(select_del)
 
         # Add widget for interpolating masks
-        interpolation_widget = InterpolationWidget(self.viewer, self.label_manager)
+        interpolation_widget = InterpolationWidget(self.viewer)
         self.edit_layout.addWidget(interpolation_widget)
 
         self.setLayout(self.edit_layout)

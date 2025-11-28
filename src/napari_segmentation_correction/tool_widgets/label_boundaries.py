@@ -4,16 +4,13 @@ from qtpy.QtWidgets import (
     QGroupBox,
     QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 from skimage.segmentation import find_boundaries
 
 from napari_segmentation_correction.helpers.process_actions_helpers import (
     process_action_seg,
 )
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
-)
+from napari_segmentation_correction.tool_widgets.base_tool_widget import BaseToolWidget
 
 
 def compute_boundaries(seg: np.ndarray) -> np.ndarray:
@@ -23,53 +20,43 @@ def compute_boundaries(seg: np.ndarray) -> np.ndarray:
     return np.multiply(seg, boundaries)
 
 
-class LabelBoundaries(QWidget):
+class LabelBoundaries(BaseToolWidget):
     """Compute the boundaries of a label image"""
 
     def __init__(
-        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
+        self, viewer: "napari.viewer.Viewer", layer_type=(napari.layers.Labels)
     ) -> None:
-        super().__init__()
+        super().__init__(viewer, layer_type)
 
-        self.viewer = viewer
-        self.label_manager = label_manager
-
-        boundary_box = QGroupBox("Label boundaries")
-        boundary_box_layout = QVBoxLayout()
+        box = QGroupBox("Label boundaries")
+        box_layout = QVBoxLayout()
         self.compute_btn = QPushButton("Run")
         self.compute_btn.clicked.connect(self._compute_boundaries)
-        self.compute_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
+        self.compute_btn.setEnabled(self.layer is not None)
+        self.update_status.connect(
+            lambda: self.compute_btn.setEnabled(self.layer is not None)
         )
-        boundary_box_layout.addWidget(self.compute_btn)
-        boundary_box.setLayout(boundary_box_layout)
 
-        self.label_manager.layer_update.connect(self._update_button_state)
+        box_layout.addWidget(self.compute_btn)
+        box.setLayout(box_layout)
 
-        main_layout = QVBoxLayout()
-        main_layout.addWidget(boundary_box)
-        self.setLayout(main_layout)
-
-    def _update_button_state(self) -> None:
-        """Update button state"""
-
-        self.compute_btn.setEnabled(
-            isinstance(self.label_manager.selected_layer, napari.layers.Labels)
-        )
+        layout = QVBoxLayout()
+        layout.addWidget(box)
+        self.setLayout(layout)
 
     def _compute_boundaries(self) -> None:
         """Compute the label boundaries of a label image"""
 
         action = compute_boundaries
         boundaries = process_action_seg(
-            self.label_manager.selected_layer.data,
+            self.layer.data,
             action,
-            basename=self.label_manager.selected_layer.name,
+            basename=self.layer.name,
         )
 
         if boundaries is not None:
-            self.label_manager.selected_layer = self.viewer.add_labels(
+            self.layer = self.viewer.add_labels(
                 boundaries,
-                name=self.label_manager.selected_layer.name + "_label_boundaries",
-                scale=self.label_manager.selected_layer.scale,
+                name=self.layer.name + "_label_boundaries",
+                scale=self.layer.scale,
             )

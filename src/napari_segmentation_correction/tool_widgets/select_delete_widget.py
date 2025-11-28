@@ -41,27 +41,25 @@ class SelectDeleteMask(QWidget):
         super().__init__()
 
         self.viewer = viewer
-        self.image1_layer = None
+        self.source_layer = None
         self.mask_layer = None
-        self.outputdir = None
 
-        ### Add one image to another
-        select_delete_box = QGroupBox("Select / Delete labels by mask")
+        select_delete_box = QGroupBox("Select/delete labels by mask")
         select_delete_box_layout = QVBoxLayout()
 
-        image1_layout = QHBoxLayout()
-        image1_layout.addWidget(QLabel("Labels"))
-        self.image1_dropdown = LayerDropdown(self.viewer, (Labels))
-        self.image1_dropdown.layer_changed.connect(self._update_image1)
-        image1_layout.addWidget(self.image1_dropdown)
+        source_layout = QHBoxLayout()
+        source_layout.addWidget(QLabel("Labels"))
+        self.source_dropdown = LayerDropdown(self.viewer, (Labels))
+        self.source_dropdown.layer_changed.connect(self._update_source)
+        source_layout.addWidget(self.source_dropdown)
 
         image2_layout = QHBoxLayout()
         image2_layout.addWidget(QLabel("Mask"))
         self.mask_dropdown = LayerDropdown(self.viewer, (Labels))
-        self.mask_dropdown.layer_changed.connect(self._update_image2)
+        self.mask_dropdown.layer_changed.connect(self._update_mask)
         image2_layout.addWidget(self.mask_dropdown)
 
-        select_delete_box_layout.addLayout(image1_layout)
+        select_delete_box_layout.addLayout(source_layout)
         select_delete_box_layout.addLayout(image2_layout)
 
         self.stack_checkbox = QCheckBox("Apply 3D mask to all time points in 4D array")
@@ -74,14 +72,16 @@ class SelectDeleteMask(QWidget):
         select_delete_box_layout.addLayout(options_layout)
 
         self.select_btn = QPushButton("Select labels")
-        self.select_btn.clicked.connect(lambda: self.select_delete_labels(select=True))
+        self.select_btn.clicked.connect(lambda: self._select_delete_labels(select=True))
         select_delete_box_layout.addWidget(self.select_btn)
 
         self.delete_btn = QPushButton("Delete labels")
-        self.delete_btn.clicked.connect(lambda: self.select_delete_labels(select=False))
+        self.delete_btn.clicked.connect(
+            lambda: self._select_delete_labels(select=False)
+        )
         select_delete_box_layout.addWidget(self.delete_btn)
 
-        self.image1_dropdown.layer_changed.connect(self._update_buttons)
+        self.source_dropdown.layer_changed.connect(self._update_buttons)
         self.mask_dropdown.layer_changed.connect(self._update_buttons)
         self._update_buttons()
 
@@ -94,41 +94,25 @@ class SelectDeleteMask(QWidget):
         """Update button state according to whether image layers are present"""
 
         active = (
-            self.image1_dropdown.selected_layer is not None
+            self.source_dropdown.selected_layer is not None
             and self.mask_dropdown.selected_layer is not None
         )
         self.select_btn.setEnabled(active)
         self.delete_btn.setEnabled(active)
 
-    def _update_image1(self, selected_layer: str) -> None:
-        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
+    def _update_source(self, selected_layer: str) -> None:
+        """Update the source layer from which to select/delete labels."""
 
         if selected_layer == "":
-            self.image1_layer = None
+            self.source_layer = None
         else:
-            self.image1_layer = self.viewer.layers[selected_layer]
-            self.image1_dropdown.setCurrentText(selected_layer)
+            self.source_layer = self.viewer.layers[selected_layer]
+            self.source_dropdown.setCurrentText(selected_layer)
 
-        # update the checkbox and buttons as needed needed
-        if self.mask_layer is not None and self.image1_layer is not None:
-            self.select_btn.setEnabled(True)
-            self.delete_btn.setEnabled(True)
-            if len(self.image1_layer.data.shape) == len(self.mask_layer.data.shape) + 1:
-                self.stack_checkbox.setEnabled(True)
-            else:
-                self.stack_checkbox.setEnabled(False)
-                self.stack_checkbox.setCheckState(False)
-            self.edit_in_place.setEnabled(True) if isinstance(
-                self.image1_layer.data, np.ndarray
-            ) else self.edit_in_place.setEnabled(False)
-        else:
-            self.select_btn.setEnabled(False)
-            self.delete_btn.setEnabled(False)
-            self.stack_checkbox.setEnabled(False)
-            self.stack_checkbox.setCheckState(False)
+        self._update_checkboxes()
 
-    def _update_image2(self, selected_layer: str) -> None:
-        """Update the layer that is set to be the 'source labels' layer for copying labels from."""
+    def _update_mask(self, selected_layer: str) -> None:
+        """Update the mask layer to indicate which labels should be selected/deleted."""
 
         if selected_layer == "":
             self.mask_layer = None
@@ -136,26 +120,35 @@ class SelectDeleteMask(QWidget):
             self.mask_layer = self.viewer.layers[selected_layer]
             self.mask_dropdown.setCurrentText(selected_layer)
 
-        # update the checkbox and buttons as needed
-        if self.mask_layer is not None and self.image1_layer is not None:
+        self._update_checkboxes()
+
+    def _update_checkboxes(self) -> None:
+        """update the checkbox and buttons as needed needed"""
+
+        if self.mask_layer is not None and self.source_layer is not None:
             self.select_btn.setEnabled(True)
             self.delete_btn.setEnabled(True)
-            if len(self.image1_layer.data.shape) == len(self.mask_layer.data.shape) + 1:
+            if len(self.source_layer.data.shape) == len(self.mask_layer.data.shape) + 1:
                 self.stack_checkbox.setEnabled(True)
             else:
                 self.stack_checkbox.setEnabled(False)
                 self.stack_checkbox.setCheckState(False)
+            self.edit_in_place.setEnabled(True) if isinstance(
+                self.source_layer.data, np.ndarray
+            ) else self.edit_in_place.setEnabled(False)
         else:
             self.select_btn.setEnabled(False)
             self.delete_btn.setEnabled(False)
             self.stack_checkbox.setEnabled(False)
             self.stack_checkbox.setCheckState(False)
 
-    def select_delete_labels(self, select: bool = True):
-        """Delete labels that overlap with given mask. If the shape of the mask has 1 dimension less than the image, the mask will be applied to the current time point (index in the first dimension) of the image data."""
+    def _select_delete_labels(self, select: bool = True) -> None:
+        """Delete labels that overlap with given mask. If the shape of the mask has -1
+        dimension compared to the image, the mask will be applied to the current time point
+        (index in the first dimension) of the image data."""
 
         # check data dimensions first
-        image_shape = self.image1_layer.data.shape
+        image_shape = self.source_layer.data.shape
         mask_shape = self.mask_layer.data.shape
 
         # define action
@@ -168,45 +161,45 @@ class SelectDeleteMask(QWidget):
             # apply mask to single time point or to full stack depending on checkbox state
             if self.stack_checkbox.isChecked():
                 # loop over all time points
-                indices = range(self.image1_layer.data.shape[0])
+                indices = range(self.source_layer.data.shape[0])
                 arr = process_action(
-                    img1=self.image1_layer.data,
+                    img1=self.source_layer.data,
                     img2=self.mask_layer.data,
                     img1_index=indices,
                     img2_index=None,
                     action=action,
-                    basename=self.image1_layer.name,
+                    basename=self.source_layer.name,
                     in_place=in_place,
                 )
 
             else:
                 tp = self.viewer.dims.current_step[0]
                 arr = process_action(
-                    img1=self.image1_layer.data,
+                    img1=self.source_layer.data,
                     img2=self.mask_layer.data,
                     img1_index=tp,
                     img2_index=None,
                     action=action,
-                    basename=self.image1_layer.name,
+                    basename=self.source_layer.name,
                     in_place=in_place,
                 )
 
         elif image_shape == mask_shape:
             indices = None
-            if "dimension_info" in self.image1_layer.metadata:
-                _, axes_labels, _ = self.image1_layer.metadata["dimension_info"]
+            if "dimension_info" in self.source_layer.metadata:
+                _, axes_labels, _ = self.source_layer.metadata["dimension_info"]
                 # in the case the use explicitely set the time dimension, we use it to
                 # index
                 if "T" in axes_labels:
-                    indices = range(self.image1_layer.data.shape[0])
+                    indices = range(self.source_layer.data.shape[0])
 
             arr = process_action(
-                img1=self.image1_layer.data,
+                img1=self.source_layer.data,
                 img2=self.mask_layer.data,
                 img1_index=indices,
                 img2_index=indices,
                 action=action,
-                basename=self.image1_layer.name,
+                basename=self.source_layer.name,
                 in_place=in_place,
             )
 
@@ -220,10 +213,10 @@ class SelectDeleteMask(QWidget):
             return
 
         if not in_place:
-            self.image1_layer = self.viewer.add_labels(
+            self.source_layer = self.viewer.add_labels(
                 arr,
-                name=self.image1_layer.name + "_filtered_labels",
-                scale=self.image1_layer.scale,
+                name=self.source_layer.name + "_filtered_labels",
+                scale=self.source_layer.scale,
             )
         else:
-            self.image1_layer.refresh()
+            self.source_layer.refresh()

@@ -9,7 +9,6 @@ from qtpy.QtWidgets import (
     QGroupBox,
     QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 from scipy.ndimage import distance_transform_edt
 from skimage.io import imread
@@ -17,9 +16,7 @@ from skimage.io import imread
 from napari_segmentation_correction.helpers.process_actions_helpers import (
     remove_invalid_chars,
 )
-from napari_segmentation_correction.layer_control_widgets.layer_manager import (
-    LayerManager,
-)
+from napari_segmentation_correction.tool_widgets.base_tool_widget import BaseToolWidget
 
 
 def signed_distance_transform(mask: np.ndarray) -> np.ndarray:
@@ -57,28 +54,22 @@ def interpolate_binary_mask(mask: np.ndarray) -> np.ndarray:
     return output
 
 
-class InterpolationWidget(QWidget):
+class InterpolationWidget(BaseToolWidget):
     """Widget to interpolate between nonzero pixels in a label layer using signed
     distance transforms."""
 
     def __init__(
-        self, viewer: "napari.viewer.Viewer", label_manager: LayerManager
+        self, viewer: "napari.viewer.Viewer", layer_type=(napari.layers.Labels)
     ) -> None:
-        super().__init__()
-
-        self.viewer = viewer
-        self.label_manager = label_manager
-        self.outputdir = None
+        super().__init__(viewer, layer_type)
 
         interpolator_box = QGroupBox("Interpolate mask")
         interpolator_box_layout = QVBoxLayout()
 
         run_btn = QPushButton("Run interpolation along first axis")
         run_btn.clicked.connect(self._interpolate)
-        run_btn.setEnabled(self.label_manager.selected_layer is not None)
-        self.label_manager.layer_update.connect(
-            lambda: run_btn.setEnabled(self.label_manager.selected_layer is not None)
-        )
+        run_btn.setEnabled(self.layer is not None)
+        self.update_status.connect(lambda: run_btn.setEnabled(self.layer is not None))
         interpolator_box_layout.addWidget(run_btn)
 
         interpolator_box.setLayout(interpolator_box_layout)
@@ -89,26 +80,22 @@ class InterpolationWidget(QWidget):
     def _interpolate(self) -> None:
         """Interpolate between the nonzero pixels in the selected layer"""
 
-        if isinstance(self.label_manager.selected_layer.data, da.core.Array):
+        if isinstance(self.layer.data, da.core.Array):
             outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
             if not outputdir:
                 return
 
             outputdir = os.path.join(
                 outputdir,
-                remove_invalid_chars(
-                    self.label_manager.selected_layer.name + "_interpolated"
-                ),
+                remove_invalid_chars(self.layer.name + "_interpolated"),
             )
             while os.path.exists(outputdir):
                 outputdir = outputdir + "_1"
             os.mkdir(outputdir)
 
             in_memory_stack = []
-            for i in range(
-                self.label_manager.selected_layer.data.shape[0]
-            ):  # Loop over the first dimension
-                current_stack = self.label_manager.selected_layer.data[
+            for i in range(self.layer.data.shape[0]):  # Loop over the first dimension
+                current_stack = self.layer.data[
                     i
                 ].compute()  # Compute the current stack
 
@@ -122,7 +109,7 @@ class InterpolationWidget(QWidget):
                     os.path.join(
                         outputdir,
                         (
-                            self.label_manager.selected_layer.name
+                            self.layer.name
                             + "_interpolation_TP"
                             + str(i).zfill(4)
                             + ".tif"
@@ -136,18 +123,16 @@ class InterpolationWidget(QWidget):
                 for fname in os.listdir(outputdir)
                 if fname.endswith(".tif")
             ]
-            self.label_manager.selected_layer = self.viewer.add_labels(
+            self.layer = self.viewer.add_labels(
                 da.stack([imread(fname) for fname in sorted(file_list)]),
-                name=self.label_manager.selected_layer.name + "_interpolated",
-                scale=self.label_manager.selected_layer.scale,
+                name=self.layer.name + "_interpolated",
+                scale=self.layer.scale,
             )
         else:
-            interpolated = interpolate_binary_mask(
-                self.label_manager.selected_layer.data
-            )
+            interpolated = interpolate_binary_mask(self.layer.data)
 
-            self.label_manager.selected_layer = self.viewer.add_labels(
+            self.layer = self.viewer.add_labels(
                 interpolated,
-                name=self.label_manager.selected_layer.name + "_interpolated",
-                scale=self.label_manager.selected_layer.scale,
+                name=self.layer.name + "_interpolated",
+                scale=self.layer.scale,
             )

@@ -58,7 +58,7 @@ class DimensionWidget(BaseToolWidget):
                     a.currentText() not in ("C", "T")
                 )
             )
-            axis_combo.currentIndexChanged.connect(self.update_apply_button_state)
+            axis_combo.currentIndexChanged.connect(self._update_apply_button_state)
 
             # Add to layout
             self.grid.addWidget(dim_label, row + 1, 0)
@@ -135,10 +135,10 @@ class DimensionWidget(BaseToolWidget):
         if "dimension_info" not in self.layer.metadata:
             self.apply_dims()
         else:
-            self.update_apply_button_state()
+            self._update_apply_button_state()
             self.update_dims.emit()
 
-    def update_apply_button_state(self) -> None:
+    def _update_apply_button_state(self) -> None:
         """Check if the current dimensions are valid (must include Y,X, no duplicate axes)"""
 
         axes = [

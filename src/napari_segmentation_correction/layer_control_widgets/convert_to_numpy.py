@@ -15,7 +15,7 @@ class ConvertToNumpyWidget(BaseToolWidget):
     def __init__(
         self,
         viewer: napari.Viewer,
-        layer_type=(napari.layers.Labels, napari.layers.Labels),
+        layer_type=(napari.layers.Labels, napari.layers.Image),
     ):
         super().__init__(viewer, layer_type)
 
@@ -25,6 +25,11 @@ class ConvertToNumpyWidget(BaseToolWidget):
             self.layer is not None and isinstance(self.layer.data, da.core.Array)
         )
         self.convert_to_array_btn.clicked.connect(self._convert_to_array)
+        self.update_status.connect(
+            lambda: self.convert_to_array_btn.setEnabled(
+                self.layer is not None and isinstance(self.layer.data, da.core.Array)
+            )
+        )
 
         layout = QVBoxLayout()
         layout.addWidget(self.convert_to_array_btn)

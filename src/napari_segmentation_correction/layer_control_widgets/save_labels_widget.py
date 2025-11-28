@@ -123,19 +123,11 @@ class SaveLabelsWidget(BaseToolWidget):
         }
         dtype = dtype_map[self.select_dtype.currentText()]
         use_compression = self.use_compression.isChecked()
-        filename = self.filename.text()
+        filename = remove_invalid_chars(self.filename.text())
 
         outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
         if not outputdir:
             return
-
-        outputdir = os.path.join(
-            outputdir,
-            remove_invalid_chars(filename),
-        )
-        while os.path.exists(outputdir):
-            outputdir = outputdir + "_1"
-        os.mkdir(outputdir)
 
         if ndim >= 3 and split_time_points:
             for i in range(data.shape[0]):

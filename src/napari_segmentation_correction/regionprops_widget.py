@@ -161,7 +161,6 @@ class RegionPropsWidget(BaseToolWidget):
         self.table = None
         self.ndims = 2
         self.feature_dims = 2
-        self.axis_widgets = []
 
         intensity_box = QGroupBox("Intensity features")
         intensity_box.setMaximumHeight(140)

@@ -42,8 +42,8 @@ class LabelToolbox(QWidget):
                 )
             )
 
-        orth_view_manager = _get_manager(self.viewer)
-        orth_view_manager.register_layer_hook(Labels, label_options_click_hook)
+        self.orth_view_manager = _get_manager(self.viewer)
+        self.orth_view_manager.register_layer_hook(Labels, label_options_click_hook)
 
         ### Add layer controls widget to tab
         controls_scroll_area = QScrollArea()
@@ -79,3 +79,9 @@ class LabelToolbox(QWidget):
         self.main_layout = QVBoxLayout()
         self.main_layout.addWidget(self.tab_widget)
         self.setLayout(self.main_layout)
+
+    def deleteLater(self):
+        """Ensure ortho views get cleaned up properly"""
+
+        self.orth_view_manager.cleanup()
+        super().deleteLater()

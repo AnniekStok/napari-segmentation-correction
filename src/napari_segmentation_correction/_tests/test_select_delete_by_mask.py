@@ -140,7 +140,7 @@ def test_numpy_many_with_mask_index(small_seg_np, small_mask):
 def test_dask_single(tmp_output, small_seg_dask, small_mask, monkeypatch):
     # monkeypatch QFileDialog to auto-return tmp_output
     monkeypatch.setattr(
-        "PyQt5.QtWidgets.QFileDialog.getExistingDirectory",
+        "qtpy.QtWidgets.QFileDialog.getExistingDirectory",
         lambda *a, **k: str(tmp_output),
     )
 
@@ -166,7 +166,7 @@ def test_dask_single(tmp_output, small_seg_dask, small_mask, monkeypatch):
 # DASK: ALL FRAMES
 def test_dask_many(tmp_output, small_seg_dask, small_mask, monkeypatch):
     monkeypatch.setattr(
-        "PyQt5.QtWidgets.QFileDialog.getExistingDirectory",
+        "qtpy.QtWidgets.QFileDialog.getExistingDirectory",
         lambda *a, **k: str(tmp_output),
     )
 
@@ -188,7 +188,7 @@ def test_dask_many(tmp_output, small_seg_dask, small_mask, monkeypatch):
 # DASK: MANY FRAMES WITH MASK INDEX
 def test_dask_many_with_mask_index(tmp_output, small_seg_dask, small_mask, monkeypatch):
     monkeypatch.setattr(
-        "PyQt5.QtWidgets.QFileDialog.getExistingDirectory",
+        "qtpy.QtWidgets.QFileDialog.getExistingDirectory",
         lambda *a, **k: str(tmp_output),
     )
 

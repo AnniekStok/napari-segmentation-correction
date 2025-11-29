@@ -2,8 +2,8 @@
 Toolbox for editing 2D-5D label data.
 """
 
-import napari
 from napari.layers import Labels
+from napari.viewer import Viewer
 from napari_orthogonal_views.ortho_view_manager import _get_manager
 from qtpy.QtWidgets import (
     QScrollArea,
@@ -21,7 +21,7 @@ from napari_segmentation_correction.toolwidgets import ToolWidgets
 class LabelToolbox(QWidget):
     """Collection of toolbox widgets that help to correct and analyze segmentation labels."""
 
-    def __init__(self, viewer: "napari.viewer.Viewer") -> None:
+    def __init__(self, viewer: Viewer) -> None:
         super().__init__()
         self.viewer = viewer
         self.source_labels = None

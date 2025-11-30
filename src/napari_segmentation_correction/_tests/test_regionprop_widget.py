@@ -8,12 +8,15 @@ def test_regionprops_widget(make_napari_viewer, qtbot, img_3d):
 
     viewer = make_napari_viewer()
     regionprops_widget = RegionPropsWidget(viewer)
+    qtbot.addWidget(regionprops_widget)
+
     layer_controls = LayerControlsWidget(viewer)
+    qtbot.addWidget(layer_controls)
+
     plot_widget = PlotWidget(viewer)
+    qtbot.addWidget(plot_widget)
 
     layer_controls.update_dims.connect(regionprops_widget.update_properties)
-    qtbot.addWidget(layer_controls)
-    qtbot.addWidget(regionprops_widget)
 
     layer = viewer.add_labels(img_3d())
     assert len(regionprops_widget.checkboxes) == 11

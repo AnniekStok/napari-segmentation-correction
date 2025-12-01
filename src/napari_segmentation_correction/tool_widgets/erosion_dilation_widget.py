@@ -79,7 +79,7 @@ class ErosionDilationWidget(BaseToolWidget):
         self.erode_btn = QPushButton("Erode")
         self.dilate_btn = QPushButton("Dilate")
         self.erode_btn.clicked.connect(lambda: self._erode_dilate_labels(erode=True))
-        self.dilate_btn.clicked.connect(lambda: self.erode_dilate_labels(erode=False))
+        self.dilate_btn.clicked.connect(lambda: self._erode_dilate_labels(erode=False))
         erode_expand_buttons_layout.addWidget(self.erode_btn)
         erode_expand_buttons_layout.addWidget(self.dilate_btn)
 

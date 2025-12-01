@@ -67,15 +67,14 @@ class SaveLabelsWidget(BaseToolWidget):
         # Filename
         self.filename = QLineEdit()
         self.filename.setPlaceholderText("File name")
-        self.filename.setToolTip("Filename for saving labels")
 
         ## Add save button
-        self.save_btn = QPushButton("Save labels")
+        self.save_btn = QPushButton("Save")
         self.save_btn.clicked.connect(self._save_labels)
         self.save_btn.setEnabled(isinstance(self.layer, Labels))
 
         # Combine layouts
-        save_box = QGroupBox("Save labels")
+        save_box = QGroupBox("Save")
         layout = QVBoxLayout()
 
         settings_layout = QHBoxLayout()

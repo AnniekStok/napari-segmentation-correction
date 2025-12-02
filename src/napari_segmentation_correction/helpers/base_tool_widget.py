@@ -10,7 +10,7 @@ class BaseToolWidget(QWidget):
     state depending on whether the current active layer is a suitable target for its
     function."""
 
-    update_status = Signal(bool)
+    update_status = Signal()
 
     def __init__(self, viewer: "napari.viewer.Viewer", layer_type: tuple) -> None:
         super().__init__()
@@ -32,9 +32,7 @@ class BaseToolWidget(QWidget):
             selected_layer = self.viewer.layers.selection.active
             if isinstance(selected_layer, self.layer_type):
                 self.layer = selected_layer
-                active = True
             else:
                 self.layer = None
-                active = False
 
-            self.update_status.emit(active)
+            self.update_status.emit()

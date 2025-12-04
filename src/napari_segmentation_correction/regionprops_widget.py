@@ -30,49 +30,69 @@ from napari_segmentation_correction.regionprops.regionprops_extended import (
 )
 
 
-def reorder_to_match(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    """
-    Reorder axes of `b` so its leading axes match `a.shape`.
-    If b has one extra axis, that axis will be moved to the end of the returned array.
+def slice_axis(arr: np.ndarray | da.core.Array, idx: int, axis: int) -> np.ndarray:
+    """Returns arr sliced at position idx along the given axis.
+    Works for both NumPy and Dask arrays."""
+
+    if isinstance(arr, da.core.Array):
+        sl = [slice(None)] * arr.ndim
+        sl[axis] = idx
+        return arr[tuple(sl)].compute()
+    else:
+        sl = [slice(None)] * arr.ndim
+        sl[axis] = idx
+        return arr[tuple(sl)]
+
+
+def reorder_intensity_like_labels(
+    labels: np.ndarray, intensity: np.ndarray
+) -> np.ndarray | None:
+    """Reorder intensity array:
+        - intensity must match labels, or
+        - intensity may have an extra trailing C dimension.
+    Reorder axes of `intensity` so its leading axes match `labels.shape`.
+    If intensity has one extra axis, that axis will be moved to the end of the returned array.
     Raises ValueError if matching is impossible.
     """
-    a = np.asarray(a)
-    b = np.asarray(b)
+    if intensity is None:
+        return None
+    if intensity.shape == labels.shape:
+        return intensity
 
-    shape_a = a.shape
-    shape_b = b.shape
-    nd_a = len(shape_a)
-    nd_b = len(shape_b)
+    shape_labels = labels.shape
+    shape_intensity = intensity.shape
+    nd_labels = len(shape_labels)
+    nd_intensity = len(shape_intensity)
 
-    # same number of dims: try to permute b to match a
-    if nd_b == nd_a:
-        for perm in permutations(range(nd_b)):
-            if tuple(shape_b[i] for i in perm) == shape_a:
-                return b.transpose(perm)
+    # same number of dims: try to permute intensity to match labels
+    if nd_intensity == nd_labels:
+        for perm in permutations(range(nd_intensity)):
+            if tuple(shape_intensity[i] for i in perm) == shape_labels:
+                return intensity.transpose(perm)
         raise ValueError(
-            f"No permutation of b.shape {shape_b} matches a.shape {shape_a}."
+            f"No permutation of b.shape {shape_intensity} matches a.shape {shape_labels}."
         )
 
-    # b has exactly one extra dim: try every axis as the extra one
-    if nd_b == nd_a + 1:
-        axes = list(range(nd_b))
+    # intensity has exactly one extra dim: try every axis as the extra one
+    if nd_intensity == nd_labels + 1:
+        axes = list(range(nd_intensity))
         for extra_axis in axes:
             remaining_axes = [ax for ax in axes if ax != extra_axis]
-            # try permutations of the remaining axes to match shape_a
+            # try permutations of the remaining axes to match shape_labels
             for perm_remaining in permutations(remaining_axes):
-                if tuple(shape_b[i] for i in perm_remaining) == shape_a:
+                if tuple(shape_intensity[i] for i in perm_remaining) == shape_labels:
                     # final permutation: place the permuted remaining axes first, then the extra axis last
                     final_perm = list(perm_remaining) + [extra_axis]
-                    return b.transpose(final_perm)
+                    return intensity.transpose(final_perm)
         raise ValueError(
-            f"b has one extra axis but no permutation places its other axes in order {shape_a} "
-            f"with the extra axis last. b.shape={shape_b}, a.shape={shape_a}"
+            f"Intensity image has one extra axis but no permutation places its other axes in order {shape_labels} "
+            f"with the extra axis last. intensity shape={shape_intensity}, labels shape={shape_labels}"
         )
 
     # any other difference in rank is invalid
     raise ValueError(
-        "b must have either the same number of dimensions as a, or exactly one more."
-        f" Got a.ndim={nd_a}, b.ndim={nd_b}."
+        "Intensity image must have either the same number of dimensions as labels, or exactly one more."
+        f" Got intensity ndim={nd_labels}, labels ndim={nd_intensity}."
     )
 
 
@@ -159,8 +179,6 @@ class RegionPropsWidget(BaseToolWidget):
         super().__init__(viewer, layer_type)
 
         self.table = None
-        self.ndims = 2
-        self.feature_dims = 2
 
         intensity_box = QGroupBox("Intensity features")
         intensity_box.setMaximumHeight(140)
@@ -231,17 +249,19 @@ class RegionPropsWidget(BaseToolWidget):
 
         layout = QVBoxLayout()
         layout.addWidget(main_box)
-
         layout.setAlignment(Qt.AlignTop)
-
         self.setLayout(layout)
 
         # connect to update signal
         self.update_status.connect(self.update_properties)
         self.update_properties()
 
-    def _update_measure_btn_state(self, state: int | None = None):
+    def _update_measure_btn_state(self, state: int | None = None) -> None:
         """Update the button state according to whether at least one checkbox is checked"""
+
+        if self.layer is None:
+            self.measure_btn.setEnabled(False)
+            return
 
         checked = [
             ch["region_prop_name"]
@@ -256,17 +276,17 @@ class RegionPropsWidget(BaseToolWidget):
     def update_properties(self) -> None:
         """Update the available properties based on the selected label layer dimensions"""
 
-        if self.layer is not None and "dimension_info" in self.layer.metadata:
-            _, axes_labels, _ = self.layer.metadata["dimension_info"]
-            self.feature_dims = 3 if "Z" in axes_labels else 2
+        if self.layer is not None and "dimensions" in self.layer.metadata:
+            dims = self.layer.metadata["dimensions"]
+            feature_dims = 3 if "Z" in dims else 2
         else:
-            self.feature_dims = 2
+            feature_dims = 2
 
         # Set the visibility of each checkbox according to the dimensions
         visible_props = [
             prop["region_prop_name"]
             for prop in intensity_properties + shape_properties
-            if (self.feature_dims in prop["dims"] and self.layer is not None)
+            if (feature_dims in prop["dims"] and self.layer is not None)
         ]
         for checkbox_dict in self.checkboxes:
             prop = checkbox_dict["region_prop_name"]
@@ -293,82 +313,105 @@ class RegionPropsWidget(BaseToolWidget):
         selected_features.append("centroid")
         return selected_features
 
-    def _measure(self):
-        """Measure the selected region properties and update the table."""
+    def _measure(self) -> None:
+        """Measure selected region properties and update table."""
 
-        _, axes_labels, spacing = self.layer.metadata["dimension_info"]
-        self.use_z = "Z" in axes_labels
-        self.ndims = len(axes_labels)
-        spacing = [
-            s
-            for s, label in zip(spacing, axes_labels, strict=False)
-            if label not in ("C", "T")
+        def drop_axis(arr, axis):
+            if isinstance(arr, da.core.Array):
+                return da.take(arr, self.viewer.dims.current_step[axis], axis=axis)
+            else:
+                return np.take(arr, self.viewer.dims.current_step[axis], axis=axis)
+
+        # extract dims and spacing
+        dims = list(self.layer.metadata["dimensions"])
+        data = self.layer.data
+        spacing = self.layer.scale
+
+        # Remove spacing entries for C/T so spacing aligns with spatial dims
+        spatial_spacing = [
+            s for s, d in zip(spacing, dims, strict=False) if d not in ("C", "T")
         ]
+
+        # selected features
         features = self._get_selected_features()
 
-        if "intensity_mean" in features and isinstance(
-            self.intensity_image_dropdown.selected_layer,
-            napari.layers.Image | napari.layers.Labels,
+        # intensity image
+        intensity_layer = self.intensity_image_dropdown.selected_layer
+        if any(f.startswith("intensity") for f in features) and isinstance(
+            intensity_layer, napari.layers.Image | napari.layers.Labels
         ):
-            intensity_image = self.intensity_image_dropdown.selected_layer.data
+            intensity = intensity_layer.data
         else:
-            intensity_image = None
+            intensity = None
 
-        data = self.layer.data
-        if intensity_image is not None and intensity_image.shape != data.shape:
-            # if shapes don't match, try to transpose the data such that the order is
-            # correct. Multichannel intensity images are allowed as long as the channel
-            # dimension is the last dimension. Since this does not match with the default
-            # napari order of dims, transpose it here.
+        # remove C dimension (labels must NOT have C)
+        if "C" in dims:
+            c_axis = dims.index("C")
+            data = drop_axis(data, c_axis)
+            dims.pop(c_axis)
 
+        # reorder intensity if needed (C must be last for regionprops)
+        if intensity is not None:
             try:
-                intensity_image = reorder_to_match(data, intensity_image)
+                intensity = reorder_intensity_like_labels(data, intensity)
             except ValueError:
                 msg = QMessageBox()
                 msg.setWindowTitle("Shape mismatch")
                 msg.setText(
-                    f"Label layer and intensity image must have compatible shapees. Got {self.layer.data.shape} and {intensity_image.shape}."
+                    f"Label layer and intensity image must have compatible shapes.\n"
+                    f"Labels: {data.shape}\nIntensity: {intensity.shape}"
                 )
                 msg.setIcon(QMessageBox.Critical)
-                msg.setStandardButtons(QMessageBox.Ok)
                 msg.exec_()
                 return
-        if (self.use_z and self.ndims == 3) or (not self.use_z and self.ndims == 2):
+
+        # choose 2D or 3D props
+        is_time = "T" in dims
+        time_axis = dims.index("T") if is_time else None
+
+        # handle non-time case
+        if not is_time:
             props = calculate_extended_props(
                 data,
-                intensity_image=intensity_image,
+                intensity_image=intensity,
                 properties=features,
-                spacing=spacing,
+                spacing=spatial_spacing,
             )
         else:
-            for i in tqdm(range(data.shape[0])):
-                d = data[i].compute() if isinstance(data, da.core.Array) else data[i]
-                if isinstance(intensity_image, da.core.Array):
-                    int_img = intensity_image[i].compute()
-                elif isinstance(intensity_image, np.ndarray):
-                    int_img = intensity_image[i]
-                else:
-                    int_img = None
-                props_slice = calculate_extended_props(
-                    d,
-                    intensity_image=int_img,
-                    properties=features,
-                    spacing=spacing,
-                )
-                props_slice["time_point"] = i
-                if i == 0:
-                    props = props_slice
-                else:
-                    props = pd.concat([props, props_slice], ignore_index=True)
+            # iterate over T
+            nT = data.shape[time_axis]
+            prop_list = []
 
-        if hasattr(self.layer, "properties"):
-            self.layer.properties = props
-            self.prop_filter_widget.set_properties()
-            self.color_by_feature_widget.set_properties()
-            self._update_table()
+            for t in tqdm(range(nT)):
+                lbl = slice_axis(data, t, time_axis)
+                if intensity is not None and intensity.ndim > lbl.ndim:
+                    # intensity has trailing C → slice T but not C
+                    int_slice = slice_axis(intensity, t, time_axis)
+                elif intensity is not None:
+                    int_slice = slice_axis(intensity, t, time_axis)
+                else:
+                    int_slice = None
+
+                p = calculate_extended_props(
+                    lbl,
+                    intensity_image=int_slice,
+                    properties=features,
+                    spacing=spatial_spacing,
+                )
+                p["time_point"] = t
+                prop_list.append(p)
+
+            props = pd.concat(prop_list, ignore_index=True)
+
+        # update layer properties
+        self.layer.properties = props
+        self.prop_filter_widget.set_properties()
+        self.color_by_feature_widget.set_properties()
+        self._update_table()
 
     def _update_table(self) -> None:
         """Update the regionprops table based on the selected label layer"""
+
         if self.table is not None:
             self.table.hide()
             self.prop_filter_widget.setVisible(False)

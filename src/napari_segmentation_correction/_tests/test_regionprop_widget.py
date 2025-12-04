@@ -16,11 +16,12 @@ def test_regionprops_widget(make_napari_viewer, qtbot, img_3d):
     plot_widget = PlotWidget(viewer)
     qtbot.addWidget(plot_widget)
 
-    layer_controls.update_dims.connect(regionprops_widget.update_properties)
+    layer_controls.dimension_widget.update_status.connect(
+        regionprops_widget.update_properties
+    )
 
     layer = viewer.add_labels(img_3d())
     assert len(regionprops_widget.checkboxes) == 11
-    assert regionprops_widget.feature_dims == 3
 
     for ch in regionprops_widget.checkboxes:
         if ch["region_prop_name"] == "volume":

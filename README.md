@@ -10,7 +10,7 @@
 Toolbox for viewing, analyzing and correcting (cell) segmentation in 2D, 3D or 4D (t, z, y, x) (virtual) arrays. 
 ----------------------------------
 
-This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template.
+This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template. 
 
 <!--
 Don't miss the full getting started guide to set up your new package:
@@ -22,26 +22,27 @@ https://napari.org/stable/plugins/index.html
 
 ## Installation
 
-You can install `napari-segmentation-correction` via [pip]:
+You can install `napari-segmentation-toolbox` via [pip]:
 
 To install latest development version :
 
-    pip install git+https://github.com/AnniekStok/napari-segmentation-correction.git
+    pip install git+https://github.com/AnniekStok/napari-segmentation-toolbox.git
 
 ## Usage
-This plugin serves as a toolbox aiming to help with correcting segmentation results.
-Functionalities:
-- Orthogonal views for 3D data.
+The aim is to serve as a toolbox that provides easy access to functionalities from ![SciPy](https://pypi.org/project/scipy/) and ![scikit-image](https://pypi.org/project/scikit-image/) that can help to explore and correct segmentation data. 
+
+- Orthogonal views for 3D data (also available ![separately](https://napari-hub.org/plugins/napari-orthogonal-views.html)).
 - Copy labels from a 2-5 dimensional array with multiple segmentation options to your current 2-5 dimensional label layer.
 - Label connected components, keep the largest connected cluster of labels, keep the largest fragment per label.
 - Smooth labels using a median filter.
-- Erode/dilate labels (scipy.ndimage and scikit-image)
-- Binarize an image or labels layer by applying an intensity threshold
-- Image calculator for mathematical operations on two images
+- Compute label boundaries.
+- Erode/dilate labels (scipy.ndimage and scikit-image).
+- Binarize an image or labels layer by applying an intensity threshold.
+- Image calculator for mathematical operations between two images.
 - Select/delete labels using a mask.
 - Binary mask interpolation in the z or time dimension.
-- Explore label properties (scikit-image regionprops) in a table widget and a Matplotlib plot.
-- Filter labels by properties.
+- Explore label properties in a table widget and a Matplotlib plot.
+- Filter and color regions by properties.
 
 ### Copy labels between different labels layers
 ![copy_labels](https://github.com/user-attachments/assets/4f6a638d-c6bc-4a61-bdcd-6cc29b6f817e)
@@ -86,10 +87,20 @@ It is possible to interpolate a 3D or 4D mask to fill in the region in between. 
 </table>
 
 ### Measuring label properties
-You can measure label properties, including intensity (if a matching image layer is provided), area/volume, perimeter/surface area, circularity/sphericity, ellipse/ellipsoid axes in the 'Region Properties' tab. Use the '3D data' checkbox to distinguish between measuring in 2D + time, 3D, and 3D + time, depending on your layer dimensions (2D to 4D). Once finished, a table displays the measurements, and a filter widget allows you to select objects matching a condition. The measurements are also displayed in the 'Plot'-tab for each layer for which you ran the region properties calculation. 
+You can measure label properties, including intensity (if a matching image layer is provided), area/volume, perimeter/surface area, circularity/sphericity, ellipse/ellipsoid axes in the 'Region Properties' tab. The plugin uses scikit-image regionprops with extended properties for 3D shapes based on methods from PoreSpy. 
+Make sure you set the dimensions correctly in the 'Extra layer controls' tab, to distinguish between measuring in 2D + time, 3D, and 3D + time, depending on your layer dimensions (2D to 4D). Once finished, a table displays the measurements, and a filter widget allows you to select objects matching a condition. The measurements are also displayed in the 'Plot'-tab for each layer for which you ran the region properties calculation. 
 
-![propfilter](https://github.com/user-attachments/assets/ab9c6b61-4366-4ad1-b813-7465aa183988)
+![TYX_regionprops](https://github.com/user-attachments/assets/49de0bf6-b3b5-49dc-926d-3a30206380f8)
+![ZYX_regionprops](https://github.com/user-attachments/assets/56f050fb-e59f-48cd-93a3-77088bbc36af)
 
+
+## See also
+This plugin has taken inspiration from other napari plugins with similar and more advanced functionalities such as:
+
+- ![napari-skimage-regionprops](https://github.com/haesleinhuepf/napari-skimage-regionprops)
+- ![napari-pyclesperanto-assistant](https://napari-hub.org/plugins/napari-pyclesperanto-assistant)
+- ![morphometrics](https://napari-hub.org/plugins/morphometrics)
+- ![napari-clusters-plotter](https://napari-hub.org/plugins/napari-clusters-plotter)
 
 ## Contributing
 

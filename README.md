@@ -95,7 +95,7 @@ Make sure you set the dimensions correctly in the 'Extra layer controls' tab, to
 
 
 ## See also
-This plugin has taken inspiration from other napari plugins with similar and more advanced functionalities such as:
+This plugin has taken inspiration from other napari plugins with similar and more advanced functionalities for measuring features, such as:
 
 - ![napari-skimage-regionprops](https://github.com/haesleinhuepf/napari-skimage-regionprops)
 - ![napari-pyclesperanto-assistant](https://napari-hub.org/plugins/napari-pyclesperanto-assistant)

@@ -57,7 +57,7 @@ def test_convert_to_numpy(make_napari_viewer, qtbot, img_4d):
     assert not widget.convert_to_array_btn.isEnabled()
 
 
-def test_dimension_widget(make_napari_viewer, qtbot, img_3d, img_4d):
+def test_dimension_widget(make_napari_viewer, qtbot, img_2d, img_3d, img_4d):
     """Test changing the dimensions of the layer"""
 
     viewer = make_napari_viewer()
@@ -65,69 +65,97 @@ def test_dimension_widget(make_napari_viewer, qtbot, img_3d, img_4d):
     widget = DimensionWidget(viewer)
     qtbot.addWidget(widget)
 
-    assert widget.row_active == [False] * 5
+    assert not widget.pos_combos[0].isEnabled()
+    assert not widget.pos_combos[1].isEnabled()
+    assert not widget.pos_combos[2].isEnabled()
+    assert not widget.pos_combos[3].isEnabled()
+    assert not widget.pos_combos[4].isEnabled()
 
-    img4d = viewer.add_labels(img_4d())
+    img2d = viewer.add_labels(img_2d)
+    assert "dimensions" in img2d.metadata
 
-    assert widget.row_active == [True, True, True, True] + [False]  # first 4 active
-
-    assert "dimension_info" in img4d.metadata
+    assert widget.pos_combos[0].isEnabled()
+    assert widget.pos_combos[1].isEnabled()
+    assert not widget.pos_combos[2].isEnabled()
+    assert not widget.pos_combos[3].isEnabled()
+    assert not widget.pos_combos[4].isEnabled()
 
     img3d = viewer.add_labels(img_3d())
-
-    assert widget.row_active == [True, True, True] + [False, False]  # first 3 active
-
-    # Check metadata
-    assert "dimension_info" in img3d.metadata
-    dims, axes, scale = img3d.metadata["dimension_info"]
+    assert "dimensions" in img3d.metadata
+    dims = img3d.metadata["dimensions"]
     assert len(dims) == 3
-    assert len(axes) == 3
-    assert len(scale) == 3
+
+    assert widget.pos_combos[0].isEnabled()
+    assert widget.pos_combos[1].isEnabled()
+    assert widget.pos_combos[2].isEnabled()
+    assert not widget.pos_combos[3].isEnabled()
+    assert not widget.pos_combos[4].isEnabled()
 
     # Change scaling
-    for active, (_, _, spin) in zip(
-        widget.row_active, widget.axis_widgets, strict=False
-    ):
-        if active:
-            spin.setValue(2.5)
+    widget.scale_widgets[0].setValue(2.5)
+    widget.scale_widgets[1].setValue(2.5)
+    widget.scale_widgets[2].setValue(2.5)
+    widget._apply_scale_single()
 
-    widget.apply_dims()
-    dims, axes, scale = img3d.metadata["dimension_info"]
-    assert scale == [2.5, 2.5, 2.5]
     assert tuple(img3d.scale) == (2.5, 2.5, 2.5)
 
-    # change Z -> T, check that scaling for axis 0 is back to 1
-    widget.axis_widgets[0][1].setCurrentText("T")
-    widget.axis_widgets[1][1].setCurrentText("Y")
-    widget.axis_widgets[2][1].setCurrentText("X")
-    widget.apply_dims()
-    dims, axes, scale = img3d.metadata["dimension_info"]
-    assert tuple(scale) == (1, 2.5, 2.5)
+    # change Z -> T
+    widget.name_widgets[0].setCurrentText("T")
+    widget.name_widgets[1].setCurrentText("Y")
+    widget.name_widgets[2].setCurrentText("X")
+    widget._apply_names()
+    dims = img3d.metadata["dimensions"]
+    assert tuple(dims) == ("T", "Y", "X")
 
     # Transpose dimension order
-    viewer.layers.selection.active = img4d
-    active_rows = [i for i, a in enumerate(widget.row_active) if a]
-    for _, row in zip([0, 1, 2], active_rows, strict=False):
-        _, _, spin = widget.axis_widgets[row]
+    img4d = viewer.add_labels(img_4d())
+    assert "dimensions" in img4d.metadata
 
-    # Reorder for fun: X,Y,Z
-    widget.axis_widgets[0][1].setCurrentText("X")
-    widget.axis_widgets[1][1].setCurrentText("Y")
-    widget.axis_widgets[2][1].setCurrentText("Z")
-    widget.axis_widgets[3][1].setCurrentText("T")
+    assert widget.pos_combos[0].isEnabled()
+    assert widget.pos_combos[1].isEnabled()
+    assert widget.pos_combos[2].isEnabled()
+    assert widget.pos_combos[3].isEnabled()
+    assert not widget.pos_combos[4].isEnabled()
 
-    widget.apply_dims()
+    widget.pos_combos[0].setCurrentText("1")
+    widget.pos_combos[1].setCurrentText("0")
+    widget.pos_combos[2].setCurrentText("2")
+    widget.pos_combos[3].setCurrentText("3")
+    widget._apply_axis_reorder()
 
-    expected_transpose = np.transpose(img_4d(), [3, 2, 1, 0])
+    expected_transpose = np.transpose(img_4d(), [1, 0, 2, 3])
     np.testing.assert_array_equal(img4d.data, expected_transpose)
 
-    dims, axes, scale = img4d.metadata["dimension_info"]
-    assert axes == ["X", "Y", "Z", "T"]
+    # test that invalid reorder does not change the data
+    widget.pos_combos[0].setCurrentText("1")
+    widget.pos_combos[1].setCurrentText("1")
+    widget.pos_combos[2].setCurrentText("2")
+    widget.pos_combos[3].setCurrentText("3")
+    widget._apply_axis_reorder()
+
+    np.testing.assert_array_equal(img4d.data, expected_transpose)  # data unchanged
+
+    # test that invalid change of names does not trigger update
+    dims = img4d.metadata["dimensions"]
+    assert tuple(dims) == ("T", "Z", "Y", "X")  # default names
+    widget.name_widgets[0].setCurrentText("T")
+    widget.name_widgets[1].setCurrentText("T")
+    widget.name_widgets[2].setCurrentText("Y")
+    widget.name_widgets[3].setCurrentText("X")
+    widget._apply_names()
+    dims = img4d.metadata["dimensions"]
+    assert tuple(dims) == ("T", "Z", "Y", "X")  # still the original names
 
     # Check that the metadata is loaded when switching back to img3d
     viewer.layers.selection.active = img3d
-    assert widget.row_active == [True, True, True] + [False, False]
-    assert widget.axis_widgets[0][1].currentText() == "T"
+
+    assert widget.pos_combos[0].isEnabled()
+    assert widget.pos_combos[1].isEnabled()
+    assert widget.pos_combos[2].isEnabled()
+    assert not widget.pos_combos[3].isEnabled()
+    assert not widget.pos_combos[4].isEnabled()
+
+    assert widget.name_widgets[0].currentText() == "T"
 
 
 def test_save_labels(make_napari_viewer, qtbot, img_4d, tmp_path):

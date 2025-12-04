@@ -281,7 +281,7 @@ class DimensionWidget(BaseToolWidget):
         ndim = self.layer.data.ndim
         new_order = [int(c.currentText()) for c in self.pos_combos if c.isEnabled()]
 
-        if new_order == list(range(ndim)):
+        if new_order == list(range(ndim)) or len(new_order) != len(set(new_order)):
             return
 
         # transpose data
@@ -302,9 +302,10 @@ class DimensionWidget(BaseToolWidget):
             return
 
         ndim = self.layer.data.ndim
-        self.layer.metadata["dimensions"] = [
-            self.name_widgets[i].currentText() for i in range(ndim)
-        ]
+        names = [self.name_widgets[i].currentText() for i in range(ndim)]
+        if len(names) != len(set(names)):
+            return
+        self.layer.metadata["dimensions"] = names
         self.update_status.emit()
         self.apply_name_btn.setStyleSheet("")
         self.apply_name_btn.setEnabled(False)

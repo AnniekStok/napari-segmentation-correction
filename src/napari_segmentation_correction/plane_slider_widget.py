@@ -118,6 +118,9 @@ class PlaneSliderWidget(BaseToolWidget):
     def _update_sliders(self) -> None:
         """Update the active layer"""
 
+        if self.layer is None:
+            return
+
         if len(self.layer.experimental_clipping_planes) == 0:
             plane = self.layer.plane
             self.layer.experimental_clipping_planes.append(

@@ -186,11 +186,11 @@ class SelectDeleteMask(QWidget):
 
         elif image_shape == mask_shape:
             indices = None
-            if "dimension_info" in self.source_layer.metadata:
-                _, axes_labels, _ = self.source_layer.metadata["dimension_info"]
+            if "dimensions" in self.source_layer.metadata:
+                dims = self.source_layer.metadata["dimensions"]
                 # in the case the use explicitely set the time dimension, we use it to
                 # index
-                if "T" in axes_labels:
+                if "T" in dims:
                     indices = range(self.source_layer.data.shape[0])
 
             arr = process_action(

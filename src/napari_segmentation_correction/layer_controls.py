@@ -1,5 +1,4 @@
 import napari
-from psygnal import Signal
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QVBoxLayout,
@@ -25,8 +24,6 @@ class LayerControlsWidget(QWidget):
     """Widgets for additional layer controls, including setting layer dimensions, plane
     sliders, copy-pasting between layers, and saving layer data in different formats."""
 
-    update_dims = Signal()
-
     def __init__(self, viewer: "napari.viewer.Viewer") -> None:
         super().__init__()
 
@@ -39,9 +36,8 @@ class LayerControlsWidget(QWidget):
         layout.addWidget(convert_to_numpy_widget)
 
         ### layer dimensions
-        dimension_widget = DimensionWidget(self.viewer)
-        dimension_widget.update_dims.connect(self.update_dims)  # forward signal
-        layout.addWidget(dimension_widget)
+        self.dimension_widget = DimensionWidget(self.viewer)
+        layout.addWidget(self.dimension_widget)
 
         ### plane sliders
         plane_sliders = PlaneSliderWidget(self.viewer)

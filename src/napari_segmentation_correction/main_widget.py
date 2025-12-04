@@ -67,9 +67,9 @@ class LabelToolbox(QWidget):
         self.tab_widget.addTab(props_scroll_area, "Region properties")
 
         # connect dimension widget signal to regionprops widget
-        self.layer_controls.update_dims.connect(
+        self.layer_controls.dimension_widget.update_status.connect(
             self.regionprops_widget.update_properties
-        )
+        )  # forward signal
 
         ### Add widget for displaying plot with regionprops
         self.plot_widget = PlotWidget(self.viewer)
@@ -79,6 +79,8 @@ class LabelToolbox(QWidget):
         self.main_layout = QVBoxLayout()
         self.main_layout.addWidget(self.tab_widget)
         self.setLayout(self.main_layout)
+
+        self.setMinimumWidth(400)
 
     def deleteLater(self):
         """Ensure ortho views get cleaned up properly"""

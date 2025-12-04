@@ -10,7 +10,9 @@ from qtpy.QtWidgets import (
     QGroupBox,
     QMessageBox,
     QPushButton,
+    QTabWidget,
     QVBoxLayout,
+    QWidget,
 )
 from tqdm import tqdm
 
@@ -178,6 +180,7 @@ class RegionPropsWidget(BaseToolWidget):
     ) -> None:
         super().__init__(viewer, layer_type)
 
+        self.tab_widget = QTabWidget(self)
         self.table = None
 
         intensity_box = QGroupBox("Intensity features")
@@ -234,22 +237,31 @@ class RegionPropsWidget(BaseToolWidget):
         self.color_by_feature_widget.setVisible(False)
 
         # Add table layout
-        self.regionprops_layout = QVBoxLayout()
+        regionprops_layout = QVBoxLayout()
 
         # Assemble layout
-        main_box = QGroupBox("Region properties")
         main_layout = QVBoxLayout()
         main_layout.addWidget(intensity_box)
         main_layout.addWidget(shape_box)
         main_layout.addWidget(self.measure_btn)
         main_layout.addWidget(self.prop_filter_widget)
         main_layout.addWidget(self.color_by_feature_widget)
-        main_layout.addLayout(self.regionprops_layout)
-        main_box.setLayout(main_layout)
+        main_layout.addLayout(regionprops_layout)
+        main_layout.setAlignment(Qt.AlignTop)
+        settings_widget = QWidget()
+        settings_widget.setLayout(main_layout)
+
+        table_widget = QWidget()
+        self.table_layout = QVBoxLayout()
+        table_widget.setLayout(self.table_layout)
+
+        self.tab_widget.addTab(settings_widget, "Settings")
+        self.tab_widget.addTab(table_widget, "Table")
+        self.tab_widget.setCurrentIndex(0)
 
         layout = QVBoxLayout()
-        layout.addWidget(main_box)
-        layout.setAlignment(Qt.AlignTop)
+        layout.addWidget(self.tab_widget)
+
         self.setLayout(layout)
 
         # connect to update signal
@@ -423,6 +435,7 @@ class RegionPropsWidget(BaseToolWidget):
         ):
             self.table = ColoredTableWidget(self.layer, self.viewer)
             self.table.setMinimumWidth(500)
-            self.regionprops_layout.addWidget(self.table)
+            self.table_layout.addWidget(self.table)
             self.prop_filter_widget.setVisible(True)
             self.color_by_feature_widget.setVisible(True)
+            self.tab_widget.setCurrentIndex(1)

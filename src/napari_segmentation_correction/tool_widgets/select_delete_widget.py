@@ -132,7 +132,7 @@ class SelectDeleteMask(QWidget):
                 self.stack_checkbox.setEnabled(True)
             else:
                 self.stack_checkbox.setEnabled(False)
-                self.stack_checkbox.setCheckState(False)
+                self.stack_checkbox.setChecked(False)
             self.edit_in_place.setEnabled(True) if isinstance(
                 self.source_layer.data, np.ndarray
             ) else self.edit_in_place.setEnabled(False)
@@ -140,7 +140,7 @@ class SelectDeleteMask(QWidget):
             self.select_btn.setEnabled(False)
             self.delete_btn.setEnabled(False)
             self.stack_checkbox.setEnabled(False)
-            self.stack_checkbox.setCheckState(False)
+            self.stack_checkbox.setChecked(False)
 
     def _select_delete_labels(self, select: bool = True) -> None:
         """Delete labels that overlap with given mask. If the shape of the mask has -1

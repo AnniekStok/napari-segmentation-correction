@@ -1,7 +1,6 @@
 import contextlib
 
 import napari
-import sip
 from psygnal import Signal
 from qtpy.QtWidgets import QComboBox
 
@@ -19,6 +18,7 @@ class LayerDropdown(QComboBox):
         self.layer_type = layer_type
         self.allow_none = allow_none
         self.selected_layer = None
+        self._deleted = False
 
         # track rename callbacks so we can disconnect them
         self._rename_callbacks = {}
@@ -38,9 +38,9 @@ class LayerDropdown(QComboBox):
 
         layer = event.value
         if isinstance(layer, self.layer_type):
-            # register callback for rename
+
             def _rename_cb(evt):
-                if not sip.isdeleted(self):
+                if not self._deleted:
                     self._update_dropdown()
 
             layer.events.name.connect(_rename_cb)
@@ -49,9 +49,9 @@ class LayerDropdown(QComboBox):
             self._update_dropdown()
 
     def _on_removed(self, event) -> None:
-        """Disconnect signals and update the dropdown when a layer is removed."""
+        """Disconnect signals and update dropdown when a layer is removed."""
 
-        if sip.isdeleted(self):
+        if self._deleted:
             return
 
         layer = event.value
@@ -65,7 +65,7 @@ class LayerDropdown(QComboBox):
 
     def _on_selection_changed(self):
         """Update the active layer when the selection changes"""
-        if sip.isdeleted(self):
+        if self._deleted:
             return
 
         if len(self.viewer.layers.selection) == 1:
@@ -80,7 +80,7 @@ class LayerDropdown(QComboBox):
     def _update_dropdown(self, event=None) -> None:
         """Update the layers in the dropdown"""
 
-        if sip.isdeleted(self):
+        if self._deleted:
             return
 
         previous = self.currentText()
@@ -107,7 +107,7 @@ class LayerDropdown(QComboBox):
     def _emit_layer_changed(self) -> None:
         """Emit a signal holding the currently selected layer"""
 
-        if sip.isdeleted(self):
+        if self._deleted:
             return
 
         name = self.currentText()
@@ -144,4 +144,5 @@ class LayerDropdown(QComboBox):
         with contextlib.suppress(Exception):
             self.currentTextChanged.disconnect(self._emit_layer_changed)
 
+        self._deleted = True
         super().deleteLater()

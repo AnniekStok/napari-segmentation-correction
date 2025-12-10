@@ -1,4 +1,6 @@
+import dask.array as da
 import napari
+import numpy as np
 import pandas as pd
 from matplotlib.colors import to_rgb
 from qtpy.QtCore import QEvent, QModelIndex, QObject, Qt
@@ -106,8 +108,19 @@ class ColoredTableWidget(QWidget):
         button_layout = QHBoxLayout()
         button_layout.addWidget(copy_button)
         button_layout.addWidget(save_button)
+
+        delete_undo_layout = QHBoxLayout()
+        delete_button = QPushButton("Delete selected labels")
+        delete_button.clicked.connect(self._delete_labels)
+        self.undo_button = QPushButton("Undo")
+        self.undo_button.setEnabled(False)
+        self.undo_button.clicked.connect(self._undo_delete)
+        delete_undo_layout.addWidget(delete_button)
+        delete_undo_layout.addWidget(self.undo_button)
+
         main_layout = QVBoxLayout()
         main_layout.addLayout(button_layout)
+        main_layout.addLayout(delete_undo_layout)
         main_layout.addWidget(label)
         main_layout.addWidget(self._table_widget)
         self.setLayout(main_layout)
@@ -141,6 +154,10 @@ class ColoredTableWidget(QWidget):
             row = self._find_row(time_point=t, label=label)
             self._select_row(row, append)
 
+        else:
+            row = self._find_row(label=label)
+            self._select_row(row, append)
+
     def _select_row(self, row: int, append: bool):
         """Select a row visually in the table."""
 
@@ -167,6 +184,112 @@ class ColoredTableWidget(QWidget):
                 return row
 
         return None
+
+    def _delete_labels(self):
+        """Delete the selected labels in the table and store state for undo"""
+
+        selected_rows = sorted(
+            {index.row() for index in self._table_widget.selectedIndexes()}
+        )
+        if not selected_rows:
+            return
+
+        self._undo_info = []
+
+        # Delete labels from the table itself
+        for row in reversed(selected_rows):
+            row_data = {col: self._table[col][row] for col in self._table}
+            self._undo_info.append({"row": row, "row_data": row_data})
+            for col in self._table:
+                self._table[col] = np.delete(self._table[col], row, axis=0)
+            self._table_widget.removeRow(row)
+
+        # Delete from layer.data
+        if "time_point" in self._table:
+            time_dim = self._layer.metadata["dimensions"].index("T")
+            for info in self._undo_info:
+                row_data = info["row_data"]
+                t = row_data["time_point"]
+                label = row_data["label"]
+
+                # Build slice for this time point
+                sl = [slice(None)] * self._layer.data.ndim
+                sl[time_dim] = int(t)
+
+                # Extract the slice and store previous state
+                sliced_data = self._layer.data[tuple(sl)]
+                if isinstance(sliced_data, da.core.Array):
+                    sliced_data = sliced_data.compute()
+                # store only the boolean mask positions affected by the label
+                mask = sliced_data == int(label)
+                prev_values = sliced_data[mask].copy()
+
+                info["slice"] = sl
+                info["mask"] = mask
+                info["prev_values"] = prev_values
+
+                # Set label to 0
+                sliced_data[mask] = 0
+                # assign back to layer
+                self._layer.data[tuple(sl)] = sliced_data
+
+        else:
+            # no time_point → delete across full volume
+            for info in self._undo_info:
+                label = info["row_data"]["label"]
+                mask = self._layer.data == int(label)
+                prev_values = self._layer.data[mask].copy()
+                info["mask"] = mask
+                info["prev_values"] = prev_values
+                self._layer.data[mask] = 0
+
+        # Enable undo button
+        self.undo_button.setEnabled(True)
+        self._layer.data = self._layer.data
+
+    def _undo_delete(self):
+        """Restore previously deleted labels and table rows"""
+
+        if not hasattr(self, "_undo_info") or not self._undo_info:
+            return
+
+        # Sort by row ascending so insert indices stay correct
+        for info in sorted(self._undo_info, key=lambda x: x["row"]):
+            row = info["row"]
+            row_data = info["row_data"]
+
+            # Restore table data (NumPy arrays)
+            for col in self._table:
+                # Make sure to wrap scalar as list for np.insert
+                value_to_insert = np.array([row_data[col]])
+                self._table[col] = np.insert(
+                    self._table[col], row, value_to_insert, axis=0
+                )
+
+            # Restore QTableWidget row visually
+            self._table_widget.insertRow(row)
+            for col_idx, col in enumerate(self._table):
+                item = QTableWidgetItem(str(row_data[col]))
+                self._table_widget.setItem(row, col_idx, item)
+
+            # Restore layer.data for this slice
+            sl = info.get("slice")
+            if sl is not None:
+                sliced_data = self._layer.data[tuple(sl)]
+                if isinstance(sliced_data, da.core.Array):
+                    sliced_data = sliced_data.compute()
+                sliced_data[info["mask"]] = info["prev_values"]
+                self._layer.data[tuple(sl)] = sliced_data
+            else:
+                # global volume undo
+                self._layer.data[info["mask"]] = info["prev_values"]
+
+        # Clear undo info and disable button
+        self._undo_info = []
+        self.undo_button.setEnabled(False)
+
+        # refresh
+        self._layer.data = self._layer.data
 
     def _set_data(self, table: dict) -> None:
         """Set the content of the table from a dictionary"""

@@ -1,4 +1,3 @@
-import functools
 import os
 from warnings import warn
 
@@ -107,6 +106,7 @@ class PropertyFilterWidget(BaseToolWidget):
         value = self.value.value()
         operation = self.operation.currentText()
         keep_delete = self.keep_delete.currentText()
+        filtered_properties = {}
 
         if self.layer is not None:
             if isinstance(self.layer.data, da.core.Array):
@@ -125,101 +125,117 @@ class PropertyFilterWidget(BaseToolWidget):
                 os.mkdir(outputdir)
 
             df = pd.DataFrame(self.layer.properties)
-            if "time_point" in df.columns and prop in df.columns:
-                filtered_label_imgs = []
-                for time_point in range(self.layer.data.shape[0]):
-                    df_subset = df.loc[df["time_point"] == time_point]
 
-                    if operation == ">":
-                        filtered_labels = df_subset.loc[
-                            df_subset[prop] > value, "label"
-                        ]
-                    elif operation == "<":
-                        filtered_labels = df_subset.loc[
-                            df_subset[prop] < value, "label"
-                        ]
-                    elif operation == "<=":
-                        filtered_labels = df_subset.loc[
-                            df_subset[prop] <= value, "label"
-                        ]
-                    elif operation == ">=":
-                        filtered_labels = df_subset.loc[
-                            df_subset[prop] >= value, "label"
-                        ]
+            if prop in df.columns:
+                if operation == ">":
+                    filtered_df = df.loc[df[prop] > value]
+                elif operation == "<":
+                    filtered_df = df.loc[df[prop] < value]
+                elif operation == ">=":
+                    filtered_df = df.loc[df[prop] >= value]
+                elif operation == "<=":
+                    filtered_df = df.loc[df[prop] <= value]
 
-                    if isinstance(self.layer.data, da.core.Array):
-                        labels = np.array(self.layer.data[time_point].compute())
-                    else:
-                        labels = np.array(self.layer.data[time_point])
+                filtered_properties = {
+                    col: filtered_df[col].to_numpy() for col in filtered_df.columns
+                }
 
-                    if len(filtered_labels) == 0:
-                        mask = np.zeros_like(labels, dtype=bool)
-                    else:
-                        mask = functools.reduce(
-                            np.logical_or, (labels == val for val in filtered_labels)
-                        )
-                    if keep_delete == "Delete":
-                        new_labels = np.where(~mask, labels, 0)
-                    else:
-                        new_labels = np.where(mask, labels, 0)
+                if "time_point" in df.columns:
+                    filtered_label_imgs = []
+                    for time_point in range(self.layer.data.shape[0]):
+                        df_subset = df.loc[df["time_point"] == time_point]
 
-                    if isinstance(self.layer.data, da.core.Array):
-                        tifffile.imwrite(
-                            os.path.join(
-                                outputdir,
-                                (
-                                    self.layer.name
-                                    + "_filtered_TP"
-                                    + str(time_point).zfill(4)
-                                    + ".tif"
+                        if operation == ">":
+                            filtered_labels = df_subset.loc[
+                                df_subset[prop] > value, "label"
+                            ]
+                        elif operation == "<":
+                            filtered_labels = df_subset.loc[
+                                df_subset[prop] < value, "label"
+                            ]
+                        elif operation == "<=":
+                            filtered_labels = df_subset.loc[
+                                df_subset[prop] <= value, "label"
+                            ]
+                        elif operation == ">=":
+                            filtered_labels = df_subset.loc[
+                                df_subset[prop] >= value, "label"
+                            ]
+
+                        if isinstance(self.layer.data, da.core.Array):
+                            labels = np.array(self.layer.data[time_point].compute())
+                        else:
+                            labels = np.array(self.layer.data[time_point])
+
+                        if len(filtered_labels) == 0:
+                            mask = np.zeros_like(labels, dtype=bool)
+                        else:
+                            mask = np.isin(labels, filtered_labels)
+                        if keep_delete == "Delete":
+                            new_labels = np.where(~mask, labels, 0)
+                        else:
+                            new_labels = np.where(mask, labels, 0)
+
+                        if isinstance(self.layer.data, da.core.Array):
+                            tifffile.imwrite(
+                                os.path.join(
+                                    outputdir,
+                                    (
+                                        self.layer.name
+                                        + "_filtered_TP"
+                                        + str(time_point).zfill(4)
+                                        + ".tif"
+                                    ),
                                 ),
-                            ),
-                            np.array(new_labels, dtype="uint16"),
+                                np.array(new_labels, dtype="uint16"),
+                            )
+                        else:
+                            filtered_label_imgs.append(new_labels)
+
+                    if isinstance(self.layer.data, da.core.Array):
+                        file_list = [
+                            os.path.join(outputdir, fname)
+                            for fname in os.listdir(outputdir)
+                            if fname.endswith(".tif")
+                        ]
+                        self.layer = self.viewer.add_labels(
+                            da.stack([imread(fname) for fname in sorted(file_list)]),
+                            name=self.layer.name + "_filtered",
+                            scale=self.layer.scale,
+                            properties=filtered_properties,
                         )
                     else:
-                        filtered_label_imgs.append(new_labels)
+                        result = np.stack(filtered_label_imgs)
+                        self.layer = self.viewer.add_labels(
+                            result,
+                            name=self.layer.name + "_filtered",
+                            scale=self.layer.scale,
+                            properties=filtered_properties,
+                        )
 
-                if isinstance(self.layer.data, da.core.Array):
-                    file_list = [
-                        os.path.join(outputdir, fname)
-                        for fname in os.listdir(outputdir)
-                        if fname.endswith(".tif")
-                    ]
-                    self.layer = self.viewer.add_labels(
-                        da.stack([imread(fname) for fname in sorted(file_list)]),
-                        name=self.layer.name + "_filtered",
-                        scale=self.layer.scale,
-                    )
                 else:
-                    result = np.stack(filtered_label_imgs)
+                    if operation == ">":
+                        filtered_labels = df.loc[df[prop] > value, "label"]
+                    elif operation == "<":
+                        filtered_labels = df.loc[df[prop] < value, "label"]
+                    elif operation == "<=":
+                        filtered_labels = df.loc[df[prop] <= value, "label"]
+                    elif operation == ">=":
+                        filtered_labels = df.loc[df[prop] >= value, "label"]
+
+                    labels = np.array(self.layer.data)
+                    mask = np.isin(labels, filtered_labels)
+                    if keep_delete == "Delete":
+                        result = np.where(~mask, labels, 0)
+                    else:
+                        result = np.where(mask, labels, 0)
+
                     self.layer = self.viewer.add_labels(
                         result,
                         name=self.layer.name + "_filtered",
                         scale=self.layer.scale,
+                        properties=filtered_properties,
                     )
-
-            elif prop in df.columns:
-                if operation == ">":
-                    filtered_labels = df.loc[df[prop] > value, "label"]
-                elif operation == "<":
-                    filtered_labels = df.loc[df[prop] < value, "label"]
-                elif operation == "<=":
-                    filtered_labels = df.loc[df[prop] <= value, "label"]
-                elif operation == ">=":
-                    filtered_labels = df.loc[df[prop] >= value, "label"]
-
-                labels = np.array(self.layer.data)
-                mask = np.isin(labels, filtered_labels)
-                if keep_delete == "Delete":
-                    result = np.where(~mask, labels, 0)
-                else:
-                    result = np.where(mask, labels, 0)
-
-                self.layer = self.viewer.add_labels(
-                    result,
-                    name=self.layer.name + "_filtered",
-                    scale=self.layer.scale,
-                )
 
             else:
                 warn(f"Property {prop} not found in layer properties", stacklevel=2)

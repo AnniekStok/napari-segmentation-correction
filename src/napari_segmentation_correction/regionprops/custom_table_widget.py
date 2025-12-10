@@ -2,12 +2,12 @@ import dask.array as da
 import napari
 import numpy as np
 import pandas as pd
-from matplotlib.colors import to_rgb
-from qtpy.QtCore import QEvent, QModelIndex, QObject, Qt
+from matplotlib.colors import to_rgba
+from napari.utils import CyclicLabelColormap, DirectLabelColormap
+from qtpy.QtCore import QEvent, QModelIndex, QObject, Qt, QTimer
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
     QAbstractItemView,
-    QApplication,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -30,14 +30,13 @@ class ClickToSingleSelectFilter(QObject):
 
     def eventFilter(self, obj, event):
         if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
-            modifiers = QApplication.keyboardModifiers()
-            # If NO modifier (plain click), clear selection first so Qt will select only clicked row
+            modifiers = event.modifiers()
             if not (
                 modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.MetaModifier)
             ):
                 self.table.clearSelection()
-                return False
             return False
+
         return False
 
 
@@ -78,6 +77,7 @@ class ColoredTableWidget(QWidget):
         self._layer = layer
         self._viewer = viewer
         self._table_widget = CustomTableWidget()
+        self.special_selection = []
 
         self._layer.events.colormap.connect(self._set_label_colors_to_rows)
         self._layer.events.show_selected_label.connect(self._set_label_colors_to_rows)
@@ -92,7 +92,7 @@ class ColoredTableWidget(QWidget):
 
         # Instruction label to explain left and right mouse click.
         label = QLabel(
-            "Use left mouse click to select and center a label, use right mouse click to show the selected label only."
+            "Use left mouse click to select and center a label, use right mouse click to show the selected label only. Use SHIFT for multi-selection."
         )
         label.setWordWrap(True)
         font = label.font()
@@ -146,6 +146,7 @@ class ColoredTableWidget(QWidget):
 
         if label is None or label == 0:
             self._table_widget.clearSelection()
+            self._reset_layer_colormap()
             return
 
         if "time_point" in self._table:
@@ -157,6 +158,8 @@ class ColoredTableWidget(QWidget):
         else:
             row = self._find_row(label=label)
             self._select_row(row, append)
+
+        self._update_label_colormap()
 
     def _select_row(self, row: int, append: bool):
         """Select a row visually in the table."""
@@ -320,7 +323,9 @@ class ColoredTableWidget(QWidget):
 
         for i in range(self._table_widget.rowCount()):
             label = self._table["label"][i]
-            label_color = to_rgb(self._layer.colormap.map(label))
+            label_color = to_rgba(self._layer.colormap.map(label))
+            if label_color[3] == 0:
+                label_color = [0, 0, 0, 0]  # label was hidden, so overwrite
             scaled_color = (
                 int(label_color[0] * 255),
                 int(label_color[1] * 255),
@@ -342,20 +347,16 @@ class ColoredTableWidget(QWidget):
         """Center the viewer to clicked label. If the right mouse button was used, set
         layer.show_selected_label to True, else False.
         """
-
-        if right:
-            self._table_widget.clearSelection()
         row = index.row()
         label = self._table["label"][row]
         self._layer.selected_label = label
-        self._layer.show_selected_label = right
         spatial_columns = sorted([key for key in self._table if "centroid" in key])
         spatial_coords = [int(self._table[col][row]) for col in spatial_columns]
 
         if "dimensions" in self._layer.metadata:
             dims = self._layer.metadata["dimensions"]
         else:
-            ndim = self.layer.data.ndim
+            ndim = self._layer.data.ndim
             dims = ["C", "T", "Z", "Y", "X"][:-ndim]
 
         step = list(self._viewer.dims.current_step)
@@ -367,6 +368,73 @@ class ColoredTableWidget(QWidget):
         step[-1] = spatial_coords[-1]
 
         self._viewer.dims.current_step = step
+
+        if right:
+            if not shift:
+                self.special_selection = [label]
+            else:
+                self.special_selection.append(label)
+            self._table_widget.clearSelection()
+        else:
+            self.special_selection = []
+        QTimer.singleShot(0, self._update_label_colormap)
+
+    def _update_label_colormap(self):
+        """
+        Highlight the labels of selected rows.
+        """
+
+        # replace cyclic map by direct map if necessary
+        if isinstance(self._layer.colormap, CyclicLabelColormap):
+            labels = self._table["label"]
+            colors = [self._layer.colormap.map(label) for label in labels]
+            self._layer.colormap = DirectLabelColormap(
+                color_dict={
+                    **dict(zip(labels, colors, strict=True)),
+                    None: [0, 0, 0, 0],
+                }
+            )
+
+        # in case of right-click on the table, we should only show the selected label(s)
+        if len(self.special_selection) != 0:
+            for _, color in self._layer.colormap.color_dict.items():
+                color[-1] = 0
+            for key in self.special_selection:
+                if key in self._layer.colormap.color_dict:
+                    self._layer.colormap.color_dict[key][-1] = 1
+
+        # find selected rows, and set highlight matching labels
+        else:
+            selected_rows = sorted(
+                {index.row() for index in self._table_widget.selectedIndexes()}
+            )
+            if not selected_rows:
+                self._reset_layer_colormap()
+                return
+
+            selected_labels = [self._table["label"][row] for row in selected_rows]
+            for key, color in self._layer.colormap.color_dict.items():
+                if key is not None and key != 0:
+                    color[-1] = 0.6
+            for key in selected_labels:
+                if key in self._layer.colormap.color_dict:
+                    self._layer.colormap.color_dict[key][-1] = 1
+
+        self._layer.colormap = DirectLabelColormap(
+            color_dict=self._layer.colormap.color_dict
+        )
+
+    def _reset_layer_colormap(self):
+        """Set all alpha values back to 1 to reset the colormap"""
+
+        self.special_selection = []
+        if self._layer is not None:
+            for key in self._layer.colormap.color_dict:
+                if key is not None and key != 0:
+                    self._layer.colormap.color_dict[key][-1] = 1
+            self._layer.colormap = DirectLabelColormap(
+                color_dict=self._layer.colormap.color_dict
+            )
 
     def _sort_table(self) -> None:
         """Sorts the table in ascending or descending order"""

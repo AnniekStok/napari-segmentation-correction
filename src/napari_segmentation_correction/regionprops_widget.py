@@ -182,6 +182,7 @@ class RegionPropsWidget(BaseToolWidget):
 
         self.tab_widget = QTabWidget(self)
         self.table = None
+        self._source_callback = None
 
         intensity_box = QGroupBox("Intensity features")
         intensity_box.setMaximumHeight(140)
@@ -265,8 +266,8 @@ class RegionPropsWidget(BaseToolWidget):
         self.setLayout(layout)
 
         # connect to update signal
-        self.update_status.connect(self.update_properties)
-        self.update_properties()
+        self.update_status.connect(self.update_properties_and_callback)
+        self.update_properties_and_callback()
 
     def _update_measure_btn_state(self, state: int | None = None) -> None:
         """Update the button state according to whether at least one checkbox is checked"""
@@ -285,8 +286,40 @@ class RegionPropsWidget(BaseToolWidget):
             checked
         ) > 0 else self.measure_btn.setEnabled(False)
 
-    def update_properties(self) -> None:
+    def _table_callback(self, layer) -> callable:
+        """Create a callback function for copying labels from the source layer to"""
+
+        def callback(layer, event):
+            if (
+                event.type == "mouse_press"
+                and self.table is not None
+                and self.table.isVisible()
+            ):
+                selected_label = layer.get_value(
+                    event.position,
+                    view_direction=event.view_direction,
+                    dims_displayed=event.dims_displayed,
+                    world=True,
+                )
+
+                append = "Shift" in event.modifiers
+                self.table.select_label(event.position, selected_label, append=append)
+
+        return callback
+
+    def update_properties_and_callback(self) -> None:
         """Update the available properties based on the selected label layer dimensions"""
+
+        if self.layer is not None and self._source_callback is not None:
+            try:
+                self.layer.mouse_drag_callbacks.remove(self._source_callback)
+                self.layer.contour = 0
+            except ValueError:
+                pass
+
+        if self.layer is not None:
+            self._source_callback = self._table_callback(self.layer)
+            self.layer.mouse_drag_callbacks.append(self._source_callback)
 
         if self.layer is not None and "dimensions" in self.layer.metadata:
             dims = self.layer.metadata["dimensions"]

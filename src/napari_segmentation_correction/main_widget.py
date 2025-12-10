@@ -68,7 +68,7 @@ class LabelToolbox(QWidget):
 
         # connect dimension widget signal to regionprops widget
         self.layer_controls.dimension_widget.update_status.connect(
-            self.regionprops_widget.update_properties
+            self.regionprops_widget.update_properties_and_callback
         )  # forward signal
 
         ### Add widget for displaying plot with regionprops

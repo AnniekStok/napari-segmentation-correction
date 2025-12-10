@@ -17,7 +17,7 @@ def test_regionprops_widget(make_napari_viewer, qtbot, img_3d):
     qtbot.addWidget(plot_widget)
 
     layer_controls.dimension_widget.update_status.connect(
-        regionprops_widget.update_properties
+        regionprops_widget.update_properties_and_callback
     )
 
     layer = viewer.add_labels(img_3d())

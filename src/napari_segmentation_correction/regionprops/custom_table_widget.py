@@ -1,9 +1,11 @@
 import napari
 import pandas as pd
 from matplotlib.colors import to_rgb
-from qtpy.QtCore import QModelIndex, Qt
+from qtpy.QtCore import QEvent, QModelIndex, QObject, Qt
 from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
     QFileDialog,
     QHBoxLayout,
     QLabel,
@@ -14,6 +16,27 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+
+class ClickToSingleSelectFilter(QObject):
+    """Event filter to make plain left-clicks act like single selection
+    while still allowing Shift/Ctrl clicks to behave normally (append/range)."""
+
+    def __init__(self, table_widget):
+        super().__init__(table_widget)
+        self.table = table_widget
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.MouseButtonPress and event.button() == Qt.LeftButton:
+            modifiers = QApplication.keyboardModifiers()
+            # If NO modifier (plain click), clear selection first so Qt will select only clicked row
+            if not (
+                modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.MetaModifier)
+            ):
+                self.table.clearSelection()
+                return False
+            return False
+        return False
 
 
 class FloatDelegate(QStyledItemDelegate):
@@ -36,8 +59,9 @@ class CustomTableWidget(QTableWidget):
     def mousePressEvent(self, event):
         index = self.indexAt(event.pos())
         if index.isValid():
+            shift = bool(event.modifiers() & Qt.ShiftModifier)
             right = event.button() == Qt.RightButton
-            self.parent()._clicked_table(right=right, index=index)
+            self.parent()._clicked_table(right=right, shift=shift, index=index)
 
         # Call super so selection behavior still works
         super().mousePressEvent(event)
@@ -89,6 +113,61 @@ class ColoredTableWidget(QWidget):
         self.setLayout(main_layout)
         self.setMinimumHeight(300)
 
+        self._table_widget.setSelectionBehavior(QTableWidget.SelectRows)
+        self._table_widget.setStyleSheet("""
+            QTableWidget::item:selected {
+                border: 2px solid cyan;
+            }
+        """)
+
+        self._table_widget.setSelectionMode(QAbstractItemView.MultiSelection)
+        self._table_widget.setSelectionBehavior(QAbstractItemView.SelectRows)
+
+        self._click_filter = ClickToSingleSelectFilter(self._table_widget)
+        self._table_widget.viewport().installEventFilter(self._click_filter)
+
+    def select_label(
+        self, position: list[int | float], label: int, append: bool = False
+    ):
+        """Select the label that was clicked on."""
+
+        if label is None or label == 0:
+            self._table_widget.clearSelection()
+            return
+
+        if "time_point" in self._table:
+            time_dim = self._layer.metadata["dimensions"].index("T")
+            t = position[time_dim]
+            row = self._find_row(time_point=t, label=label)
+            self._select_row(row, append)
+
+    def _select_row(self, row: int, append: bool):
+        """Select a row visually in the table."""
+
+        if row is None:
+            return
+        if not append:
+            self._table_widget.clearSelection()
+        self._table_widget.selectRow(row)
+        self._table_widget.scrollToItem(self._table_widget.item(row, 0))
+
+    def _find_row(self, **conditions):
+        """
+        Find the first row matching the given conditions (eg label=12, time_point=5)
+        Returns: row index or None
+        """
+
+        n_rows = self._table_widget.rowCount()
+
+        for row in range(n_rows):
+            if all(
+                float(self._table[col][row]) == float(val)
+                for col, val in conditions.items()
+            ):
+                return row
+
+        return None
+
     def _set_data(self, table: dict) -> None:
         """Set the content of the table from a dictionary"""
 
@@ -105,7 +184,9 @@ class ColoredTableWidget(QWidget):
         for i, column in enumerate(table):
             self._table_widget.setHorizontalHeaderItem(i, QTableWidgetItem(column))
             for j, value in enumerate(table.get(column)):
-                self._table_widget.setItem(j, i, QTableWidgetItem(str(value)))
+                item = QTableWidgetItem(str(value))
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self._table_widget.setItem(j, i, item)
 
         self._table_widget.setItemDelegate(FloatDelegate(3, self._table_widget))
 
@@ -134,10 +215,13 @@ class ColoredTableWidget(QWidget):
         """Copy table to clipboard"""
         pd.DataFrame(self._table).to_clipboard()
 
-    def _clicked_table(self, right: bool, index: QModelIndex) -> None:
+    def _clicked_table(self, right: bool, shift: bool, index: QModelIndex) -> None:
         """Center the viewer to clicked label. If the right mouse button was used, set
         layer.show_selected_label to True, else False.
         """
+
+        if right:
+            self._table_widget.clearSelection()
         row = index.row()
         label = self._table["label"][row]
         self._layer.selected_label = label
@@ -145,12 +229,21 @@ class ColoredTableWidget(QWidget):
         spatial_columns = sorted([key for key in self._table if "centroid" in key])
         spatial_coords = [int(self._table[col][row]) for col in spatial_columns]
 
-        if "time_point" in self._table:
-            new_step = (int(self._table["time_point"][row]), *spatial_coords)
+        if "dimensions" in self._layer.metadata:
+            dims = self._layer.metadata["dimensions"]
         else:
-            new_step = spatial_coords
+            ndim = self.layer.data.ndim
+            dims = ["C", "T", "Z", "Y", "X"][:-ndim]
 
-        self._viewer.dims.current_step = new_step
+        step = list(self._viewer.dims.current_step)
+        if "time_point" in self._table:
+            step[dims.index("T")] = int(self._table["time_point"][row])
+        if len(spatial_coords) == 3:
+            step[dims.index("Z")] = spatial_coords[-3]
+        step[-2] = spatial_coords[-2]
+        step[-1] = spatial_coords[-1]
+
+        self._viewer.dims.current_step = step
 
     def _sort_table(self) -> None:
         """Sorts the table in ascending or descending order"""

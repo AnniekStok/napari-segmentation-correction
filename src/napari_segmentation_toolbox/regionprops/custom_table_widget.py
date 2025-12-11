@@ -3,21 +3,45 @@ import napari
 import numpy as np
 import pandas as pd
 from matplotlib.colors import to_rgba
-from napari.utils import CyclicLabelColormap, DirectLabelColormap
+from napari.utils import DirectLabelColormap
 from qtpy.QtCore import QEvent, QModelIndex, QObject, Qt, QTimer
-from qtpy.QtGui import QColor
+from qtpy.QtGui import QColor, QPen
 from qtpy.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStyle,
     QStyledItemDelegate,
+    QStyleOptionViewItem,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
+
+
+class NoSelectionHighlightDelegate(QStyledItemDelegate):
+    """Prevents Qt from painting the default selection background,
+    preserving each row's custom background color, and draws a cyan border instead."""
+
+    def paint(self, painter, option, index):
+        opt = QStyleOptionViewItem(option)
+
+        table = index.model().parent()  # your QTableWidget
+
+        if opt.state & QStyle.State_Selected:
+            opt.state &= ~QStyle.State_Selected
+
+        # Paint normally first (preserving your setBackground + setForeground)
+        super().paint(painter, opt, index)
+
+        # Draw a cyan border around the *entire row* if selected
+        if index.row() in {i.row() for i in table.selectedIndexes()}:
+            pen = QPen(Qt.cyan, 2)
+            painter.setPen(pen)
+            painter.drawRect(opt.rect.adjusted(1, 1, -2, -2))
 
 
 class ClickToSingleSelectFilter(QObject):
@@ -126,10 +150,30 @@ class ColoredTableWidget(QWidget):
         self.setLayout(main_layout)
         self.setMinimumHeight(300)
 
+        # Selection behavior
         self._table_widget.setSelectionBehavior(QTableWidget.SelectRows)
         self._table_widget.setStyleSheet("""
             QTableWidget::item:selected {
                 border: 2px solid cyan;
+            }
+        """)
+
+        self._table_widget.verticalHeader().setStyleSheet("""
+            QHeaderView::section {
+                background-color: rgb(40,40,40);       /* normal */
+                color: white;
+                padding: 4px;
+                border: 1px solid #555;
+            }
+
+            QHeaderView::section:selected {            /* when the row is selected */
+                background-color: cyan;
+                color: black;
+            }
+
+            QHeaderView::section:pressed {
+                background-color: cyan;
+                color: black;
             }
         """)
 
@@ -138,6 +182,12 @@ class ColoredTableWidget(QWidget):
 
         self._click_filter = ClickToSingleSelectFilter(self._table_widget)
         self._table_widget.viewport().installEventFilter(self._click_filter)
+
+        delegate = NoSelectionHighlightDelegate(self._table_widget)
+        self._table_widget.setItemDelegate(delegate)
+
+    def selected_rows(self):
+        return {i.row() for i in self.selectedIndexes()}
 
     def select_label(
         self, position: list[int | float], label: int, append: bool = False
@@ -389,21 +439,11 @@ class ColoredTableWidget(QWidget):
             self.special_selection = []
         QTimer.singleShot(0, self._update_label_colormap)
 
-    def _update_label_colormap(self):
+    def _update_label_colormap(self) -> None:
         """
-        Highlight the labels of selected rows.
+        Highlight the labels of selected rows. Assumes the layer already has a
+        DirectLabelColormap.
         """
-
-        # replace cyclic map by direct map if necessary
-        if isinstance(self._layer.colormap, CyclicLabelColormap):
-            labels = self._table["label"]
-            colors = [self._layer.colormap.map(label) for label in labels]
-            self._layer.colormap = DirectLabelColormap(
-                color_dict={
-                    **dict(zip(labels, colors, strict=True)),
-                    None: [0, 0, 0, 0],
-                }
-            )
 
         # in case of right-click on the table, we should only show the selected label(s)
         if len(self.special_selection) != 0:

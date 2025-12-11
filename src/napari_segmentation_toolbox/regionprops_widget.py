@@ -4,6 +4,7 @@ import dask.array as da
 import napari
 import numpy as np
 import pandas as pd
+from napari.utils import CyclicLabelColormap, DirectLabelColormap
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QCheckBox,
@@ -452,7 +453,21 @@ class RegionPropsWidget(BaseToolWidget):
         self.layer.properties = props
         self.prop_filter_widget.set_properties()
         self.color_by_feature_widget.set_properties()
+        self._convert_layer_colormap()
         self._update_table()
+
+    def _convert_layer_colormap(self):
+        """replace cyclic map by direct map if necessary"""
+
+        if isinstance(self.layer.colormap, CyclicLabelColormap):
+            labels = self.layer.properties["label"]
+            colors = [self.layer.colormap.map(label) for label in labels]
+            self.layer.colormap = DirectLabelColormap(
+                color_dict={
+                    **dict(zip(labels, colors, strict=True)),
+                    None: [0, 0, 0, 0],
+                }
+            )
 
     def _update_table(self) -> None:
         """Update the regionprops table based on the selected label layer"""

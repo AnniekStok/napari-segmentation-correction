@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from matplotlib.colors import to_rgba
 from napari.utils import DirectLabelColormap
-from qtpy.QtCore import QEvent, QModelIndex, QObject, Qt, QTimer
+from qtpy.QtCore import QEvent, QItemSelectionModel, QModelIndex, QObject, Qt, QTimer
 from qtpy.QtGui import QColor, QPen
 from qtpy.QtWidgets import (
     QAbstractItemView,
@@ -84,7 +84,7 @@ class CustomTableWidget(QTableWidget):
     def mousePressEvent(self, event):
         index = self.indexAt(event.pos())
         if index.isValid():
-            shift = bool(event.modifiers() & Qt.ShiftModifier)
+            shift = bool(event.modifiers() & Qt.ControlModifier)
             right = event.button() == Qt.RightButton
             self.parent()._clicked_table(right=right, shift=shift, index=index)
 
@@ -116,7 +116,7 @@ class ColoredTableWidget(QWidget):
 
         # Instruction label to explain left and right mouse click.
         label = QLabel(
-            "Use left mouse click to select and center a label, use right mouse click to show the selected label only. Use SHIFT for multi-selection."
+            "Use left mouse click to select and center a label, use right mouse click to show the selected label only. Use Ctrl/Meta for multi-selection, Shift for range selection."
         )
         label.setWordWrap(True)
         font = label.font()
@@ -151,7 +151,6 @@ class ColoredTableWidget(QWidget):
         self.setMinimumHeight(300)
 
         # Selection behavior
-        self._table_widget.setSelectionBehavior(QTableWidget.SelectRows)
         self._table_widget.setStyleSheet("""
             QTableWidget::item:selected {
                 border: 2px solid cyan;
@@ -177,7 +176,7 @@ class ColoredTableWidget(QWidget):
             }
         """)
 
-        self._table_widget.setSelectionMode(QAbstractItemView.MultiSelection)
+        self._table_widget.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self._table_widget.setSelectionBehavior(QAbstractItemView.SelectRows)
 
         self._click_filter = ClickToSingleSelectFilter(self._table_widget)
@@ -216,9 +215,29 @@ class ColoredTableWidget(QWidget):
 
         if row is None:
             return
-        if not append:
-            self._table_widget.clearSelection()
-        self._table_widget.selectRow(row)
+
+        model = self._table_widget.model()
+        index = model.index(row, 0)
+
+        selection_model = self._table_widget.selectionModel()
+
+        if append:
+            # Add row to existing selection (Ctrl/Meta click)
+            selection_model.select(
+                index,
+                QItemSelectionModel.SelectionFlag.Select
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
+        else:
+            # Clear existing selection and select row (normal single selection)
+            selection_model.clearSelection()
+            selection_model.select(
+                index,
+                QItemSelectionModel.SelectionFlag.Select
+                | QItemSelectionModel.SelectionFlag.Rows,
+            )
+
+        # Ensure the row is visible
         self._table_widget.scrollToItem(self._table_widget.item(row, 0))
 
     def _find_row(self, **conditions):

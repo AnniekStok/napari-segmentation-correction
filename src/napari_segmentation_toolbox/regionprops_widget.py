@@ -303,7 +303,7 @@ class RegionPropsWidget(BaseToolWidget):
                     world=True,
                 )
 
-                append = "Shift" in event.modifiers
+                append = "Control" in event.modifiers
                 self.table.select_label(event.position, selected_label, append=append)
 
         return callback

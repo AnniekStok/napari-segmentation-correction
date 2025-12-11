@@ -32,12 +32,12 @@ def setup_props_widget(make_napari_viewer, qtbot, img_4d):
     # force computation so table exists
     widget._measure()
 
-    return widget.table, viewer, layer
+    return widget.table, layer
 
 
 # Single row selection
 def test_table_single_selection(setup_props_widget, qtbot):
-    widget, viewer, layer = setup_props_widget
+    widget, layer = setup_props_widget
 
     table = widget._table_widget
     widget.special_selection = [4]
@@ -60,9 +60,48 @@ def test_table_single_selection(setup_props_widget, qtbot):
     np.testing.assert_allclose(layer.colormap.color_dict[2][-1], 0.6, rtol=1e-6)
 
 
+# Range selection
+def test_table_range_selection(setup_props_widget, qtbot):
+    widget, layer = setup_props_widget
+
+    table = widget._table_widget
+
+    original = widget._update_label_colormap
+    widget._update_label_colormap = MagicMock(side_effect=original)
+
+    idx0 = table.model().index(0, 0)
+    qtbot.mouseClick(
+        table.viewport(), Qt.LeftButton, pos=table.visualRect(idx0).center()
+    )
+
+    # Shift-click row 3 to select a range
+    idx3 = table.model().index(3, 0)
+    qtbot.mouseClick(
+        table.viewport(),
+        Qt.LeftButton,
+        Qt.ShiftModifier,
+        pos=table.visualRect(idx3).center(),
+    )
+    selected_rows = sorted({index.row() for index in table.selectedIndexes()})
+    assert selected_rows == [0, 1, 2, 3]
+
+    qtbot.waitUntil(lambda: widget._update_label_colormap.called, timeout=1000)
+
+    # Test deleting the selected rows, and undoing the deletion.
+    assert table.rowCount() == 5
+
+    widget._delete_labels()
+    assert table.rowCount() == 1
+    assert layer.data[1, 7, 13, 9] == 0
+
+    widget._undo_delete()
+    assert table.rowCount() == 5
+    assert layer.data[1, 7, 13, 9] == 3
+
+
 # Right-click → update special_selection
 def test_table_right_click_special_selection(setup_props_widget, qtbot):
-    widget, viewer, layer = setup_props_widget
+    widget, layer = setup_props_widget
 
     table = widget._table_widget
 
@@ -73,20 +112,19 @@ def test_table_right_click_special_selection(setup_props_widget, qtbot):
     row4 = 4
 
     # simulate right-click without qtbot
-    widget._clicked_table(right=True, shift=False, index=table.model().index(row2, 0))
+    widget._clicked_table(right=True, ctrl=False, index=table.model().index(row2, 0))
     qtbot.waitUntil(lambda: widget._update_label_colormap.called, timeout=1000)
     assert isinstance(layer.colormap, DirectLabelColormap)
     assert widget.special_selection == [widget._table["label"][row2]]
     assert float(layer.colormap.color_dict[0][-1]) == 0.0
     assert float(layer.colormap.color_dict[2][-1]) == 1.0
 
-    widget._clicked_table(right=True, shift=True, index=table.model().index(row4, 0))
+    widget._clicked_table(right=True, ctrl=True, index=table.model().index(row4, 0))
 
     qtbot.waitUntil(
         lambda: float(layer.colormap.color_dict[row4][-1]) == 1.0, timeout=1000
     )
 
-    # now safe to assert
     assert widget.special_selection == [
         widget._table["label"][row2],
         widget._table["label"][row4],

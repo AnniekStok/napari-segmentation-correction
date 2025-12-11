@@ -46,7 +46,7 @@ class NoSelectionHighlightDelegate(QStyledItemDelegate):
 
 class ClickToSingleSelectFilter(QObject):
     """Event filter to make plain left-clicks act like single selection
-    while still allowing Shift/Ctrl clicks to behave normally (append/range)."""
+    while still allowing Ctrl/Shift clicks to behave normally (append/range)."""
 
     def __init__(self, table_widget):
         super().__init__(table_widget)
@@ -84,9 +84,9 @@ class CustomTableWidget(QTableWidget):
     def mousePressEvent(self, event):
         index = self.indexAt(event.pos())
         if index.isValid():
-            shift = bool(event.modifiers() & Qt.ControlModifier)
+            control = bool(event.modifiers() & Qt.ControlModifier)
             right = event.button() == Qt.RightButton
-            self.parent()._clicked_table(right=right, shift=shift, index=index)
+            self.parent()._clicked_table(right=right, ctrl=control, index=index)
 
         # Call super so selection behavior still works
         super().mousePressEvent(event)
@@ -185,13 +185,111 @@ class ColoredTableWidget(QWidget):
         delegate = NoSelectionHighlightDelegate(self._table_widget)
         self._table_widget.setItemDelegate(delegate)
 
-    def selected_rows(self):
-        return {i.row() for i in self.selectedIndexes()}
+    def _set_data(self, table: dict[str, np.ndarray]) -> None:
+        """Set the content of the table from a dictionary"""
+
+        self._table = table
+        self._layer.properties = table
+
+        self._table_widget.clear()
+        try:
+            self._table_widget.setRowCount(len(next(iter(table.values()))))
+            self._table_widget.setColumnCount(len(table))
+        except StopIteration:
+            pass
+
+        for i, column in enumerate(table):
+            self._table_widget.setHorizontalHeaderItem(i, QTableWidgetItem(column))
+            for j, value in enumerate(table.get(column)):
+                item = QTableWidgetItem(str(value))
+                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+                self._table_widget.setItem(j, i, item)
+
+        self._table_widget.setItemDelegate(FloatDelegate(3, self._table_widget))
+
+        self._set_label_colors_to_rows()
+
+    def _set_label_colors_to_rows(self) -> None:
+        """Apply the colors of the napari label image to the table"""
+
+        for i in range(self._table_widget.rowCount()):
+            label = self._table["label"][i]
+            label_color = to_rgba(self._layer.colormap.map(label))
+
+            if label_color[3] == 0:
+                label_color = [0, 0, 0, 0]
+
+            r, g, b = (
+                int(label_color[0] * 255),
+                int(label_color[1] * 255),
+                int(label_color[2] * 255),
+            )
+
+            qcolor = QColor(r, g, b)
+
+            luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            text_color = QColor(0, 0, 0) if luminance > 140 else QColor(255, 255, 255)
+
+            for j in range(self._table_widget.columnCount()):
+                item = self._table_widget.item(i, j)
+                item.setBackground(qcolor)
+                item.setForeground(text_color)
+
+    def _clicked_table(self, right: bool, ctrl: bool, index: QModelIndex) -> None:
+        """Center the viewer to clicked label. If the left mouse button was used,
+        highlight the selected label(s) in layer. If the right mouse button was used, hide
+        all other labels entirely by modifiying the colormap.
+        The special selection behavior can be modified by the ctrl/meta key, to view
+        multiple labels simultaneously.
+
+        Args:
+            right (bool): right mouse click detected.
+            ctrl (bool): ctrl/meta key was used.
+            index (QModelIndex): index of the clicked row
+        """
+        row = index.row()
+        label = self._table["label"][row]
+        self._layer.selected_label = label
+        spatial_columns = sorted([key for key in self._table if "centroid" in key])
+        spatial_coords = [int(self._table[col][row]) for col in spatial_columns]
+
+        if "dimensions" in self._layer.metadata:
+            dims = self._layer.metadata["dimensions"]
+        else:
+            ndim = self._layer.data.ndim
+            dims = ["C", "T", "Z", "Y", "X"][:-ndim]
+
+        step = list(self._viewer.dims.current_step)
+        if "time_point" in self._table:
+            step[dims.index("T")] = int(self._table["time_point"][row])
+        if len(spatial_coords) == 3:
+            step[dims.index("Z")] = spatial_coords[-3]
+        step[-2] = spatial_coords[-2]
+        step[-1] = spatial_coords[-1]
+
+        self._viewer.dims.current_step = step
+
+        if right:
+            if not ctrl:
+                self.special_selection = [label]
+            else:
+                self.special_selection.append(label)
+            self._table_widget.clearSelection()
+        else:
+            self.special_selection = []
+        QTimer.singleShot(0, self._update_label_colormap)
 
     def select_label(
         self, position: list[int | float], label: int, append: bool = False
-    ):
-        """Select the label that was clicked on."""
+    ) -> None:
+        """Select the corresponding row of the label that was clicked on, and update the colormap.
+
+        Args:
+            position (list[int|float]): coordinates of the clicked location.
+            label (int): the label value that was clicked on.
+            append (bool): whether to append to selection (ctrl/meta modifier), or start
+                a new selection
+        """
 
         if label is None or label == 0:
             self._table_widget.clearSelection()
@@ -210,8 +308,12 @@ class ColoredTableWidget(QWidget):
 
         self._update_label_colormap()
 
-    def _select_row(self, row: int, append: bool):
-        """Select a row visually in the table."""
+    def _select_row(self, row: int, append: bool) -> None:
+        """Select a row visually in the table.
+        Args:
+            row (int): the to be selected row.
+            append (bool): whether to append to the selection, or start a new selection.
+        """
 
         if row is None:
             return
@@ -240,9 +342,9 @@ class ColoredTableWidget(QWidget):
         # Ensure the row is visible
         self._table_widget.scrollToItem(self._table_widget.item(row, 0))
 
-    def _find_row(self, **conditions):
+    def _find_row(self, **conditions) -> int | None:
         """
-        Find the first row matching the given conditions (eg label=12, time_point=5)
+        Find the first row matching the given conditions (e.g. label=12, time_point=5)
         Returns: row index or None
         """
 
@@ -257,8 +359,8 @@ class ColoredTableWidget(QWidget):
 
         return None
 
-    def _delete_labels(self):
-        """Delete the selected labels in the table and store state for undo"""
+    def _delete_labels(self) -> None:
+        """Delete the selected labels in the table and store state for undo."""
 
         selected_rows = sorted(
             {index.row() for index in self._table_widget.selectedIndexes()}
@@ -319,8 +421,8 @@ class ColoredTableWidget(QWidget):
         self.undo_button.setEnabled(True)
         self._layer.data = self._layer.data
 
-    def _undo_delete(self):
-        """Restore previously deleted labels and table rows"""
+    def _undo_delete(self) -> None:
+        """Restore previously deleted labels and table rows."""
 
         if not hasattr(self, "_undo_info") or not self._undo_info:
             return
@@ -330,9 +432,8 @@ class ColoredTableWidget(QWidget):
             row = info["row"]
             row_data = info["row_data"]
 
-            # Restore table data (NumPy arrays)
+            # Restore table data
             for col in self._table:
-                # Make sure to wrap scalar as list for np.insert
                 value_to_insert = np.array([row_data[col]])
                 self._table[col] = np.insert(
                     self._table[col], row, value_to_insert, axis=0
@@ -362,101 +463,6 @@ class ColoredTableWidget(QWidget):
 
         # refresh
         self._layer.data = self._layer.data
-
-    def _set_data(self, table: dict) -> None:
-        """Set the content of the table from a dictionary"""
-
-        self._table = table
-        self._layer.properties = table
-
-        self._table_widget.clear()
-        try:
-            self._table_widget.setRowCount(len(next(iter(table.values()))))
-            self._table_widget.setColumnCount(len(table))
-        except StopIteration:
-            pass
-
-        for i, column in enumerate(table):
-            self._table_widget.setHorizontalHeaderItem(i, QTableWidgetItem(column))
-            for j, value in enumerate(table.get(column)):
-                item = QTableWidgetItem(str(value))
-                item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-                self._table_widget.setItem(j, i, item)
-
-        self._table_widget.setItemDelegate(FloatDelegate(3, self._table_widget))
-
-        self._set_label_colors_to_rows()
-
-    def _set_label_colors_to_rows(self) -> None:
-        """Apply the colors of the napari label image to the table"""
-
-        for i in range(self._table_widget.rowCount()):
-            label = self._table["label"][i]
-            label_color = to_rgba(self._layer.colormap.map(label))
-
-            if label_color[3] == 0:
-                label_color = [0, 0, 0, 0]
-
-            r, g, b = (
-                int(label_color[0] * 255),
-                int(label_color[1] * 255),
-                int(label_color[2] * 255),
-            )
-
-            qcolor = QColor(r, g, b)
-
-            luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
-            text_color = QColor(0, 0, 0) if luminance > 140 else QColor(255, 255, 255)
-
-            for j in range(self._table_widget.columnCount()):
-                item = self._table_widget.item(i, j)
-                item.setBackground(qcolor)
-                item.setForeground(text_color)
-
-    def _save_table(self) -> None:
-        """Save table to csv file"""
-        filename, _ = QFileDialog.getSaveFileName(self, "Save as csv", ".", "*.csv")
-        pd.DataFrame(self._table).to_csv(filename)
-
-    def _copy_table(self) -> None:
-        """Copy table to clipboard"""
-        pd.DataFrame(self._table).to_clipboard()
-
-    def _clicked_table(self, right: bool, shift: bool, index: QModelIndex) -> None:
-        """Center the viewer to clicked label. If the right mouse button was used, set
-        layer.show_selected_label to True, else False.
-        """
-        row = index.row()
-        label = self._table["label"][row]
-        self._layer.selected_label = label
-        spatial_columns = sorted([key for key in self._table if "centroid" in key])
-        spatial_coords = [int(self._table[col][row]) for col in spatial_columns]
-
-        if "dimensions" in self._layer.metadata:
-            dims = self._layer.metadata["dimensions"]
-        else:
-            ndim = self._layer.data.ndim
-            dims = ["C", "T", "Z", "Y", "X"][:-ndim]
-
-        step = list(self._viewer.dims.current_step)
-        if "time_point" in self._table:
-            step[dims.index("T")] = int(self._table["time_point"][row])
-        if len(spatial_coords) == 3:
-            step[dims.index("Z")] = spatial_coords[-3]
-        step[-2] = spatial_coords[-2]
-        step[-1] = spatial_coords[-1]
-
-        self._viewer.dims.current_step = step
-
-        if right:
-            if not shift:
-                self.special_selection = [label]
-            else:
-                self.special_selection.append(label)
-            self._table_widget.clearSelection()
-        else:
-            self.special_selection = []
-        QTimer.singleShot(0, self._update_label_colormap)
 
     def _update_label_colormap(self) -> None:
         """
@@ -493,8 +499,9 @@ class ColoredTableWidget(QWidget):
             color_dict=self._layer.colormap.color_dict
         )
 
-    def _reset_layer_colormap(self):
-        """Set all alpha values back to 1 to reset the colormap"""
+    def _reset_layer_colormap(self) -> None:
+        """Set all alpha values back to 1 to reset the colormap, and empty the special
+        selection."""
 
         self.special_selection = []
         if self._layer is not None:
@@ -516,3 +523,14 @@ class ColoredTableWidget(QWidget):
 
         self._set_data(df.to_dict(orient="list"))
         self._set_label_colors_to_rows()
+
+    def _save_table(self) -> None:
+        """Save table to csv file"""
+
+        filename, _ = QFileDialog.getSaveFileName(self, "Save as csv", ".", "*.csv")
+        pd.DataFrame(self._table).to_csv(filename)
+
+    def _copy_table(self) -> None:
+        """Copy table to clipboard"""
+
+        pd.DataFrame(self._table).to_clipboard()

@@ -324,15 +324,25 @@ class ColoredTableWidget(QWidget):
         for i in range(self._table_widget.rowCount()):
             label = self._table["label"][i]
             label_color = to_rgba(self._layer.colormap.map(label))
+
             if label_color[3] == 0:
-                label_color = [0, 0, 0, 0]  # label was hidden, so overwrite
-            scaled_color = (
+                label_color = [0, 0, 0, 0]
+
+            r, g, b = (
                 int(label_color[0] * 255),
                 int(label_color[1] * 255),
                 int(label_color[2] * 255),
             )
+
+            qcolor = QColor(r, g, b)
+
+            luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b
+            text_color = QColor(0, 0, 0) if luminance > 140 else QColor(255, 255, 255)
+
             for j in range(self._table_widget.columnCount()):
-                self._table_widget.item(i, j).setBackground(QColor(*scaled_color))
+                item = self._table_widget.item(i, j)
+                item.setBackground(qcolor)
+                item.setForeground(text_color)
 
     def _save_table(self) -> None:
         """Save table to csv file"""

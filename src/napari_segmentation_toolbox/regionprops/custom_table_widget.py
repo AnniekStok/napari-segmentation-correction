@@ -260,6 +260,10 @@ class ColoredTableWidget(QWidget):
             dims = ["C", "T", "Z", "Y", "X"][:-ndim]
 
         step = list(self._viewer.dims.current_step)
+        if len(step) > len(dims):
+            # there is another layer present that has lead to expansion of the dimensions.
+            # Assume that this extra dimension is on axis 0.
+            step = step[-len(dims) :]
         if "time_point" in self._table:
             step[dims.index("T")] = int(self._table["time_point"][row])
         if "channel" in self._table:

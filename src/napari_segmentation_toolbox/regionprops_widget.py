@@ -1,5 +1,3 @@
-from itertools import permutations
-
 import dask.array as da
 import napari
 import numpy as np
@@ -33,56 +31,43 @@ from napari_segmentation_toolbox.regionprops.regionprops_extended import (
 )
 
 
-def reorder_intensity_like_labels(
-    labels: np.ndarray, intensity: np.ndarray
-) -> np.ndarray | None:
-    """Reorder intensity array:
-        - intensity must match labels, or
-        - intensity may have an extra trailing C dimension.
-    Reorder axes of `intensity` so its leading axes match `labels.shape`.
-    If intensity has one extra axis, that axis will be moved to the end of the returned array.
-    Raises ValueError if matching is impossible.
+def reorder_array(A_axes, B_axes, B_array):
     """
-    if intensity is None:
-        return None
-    if intensity.shape == labels.shape:
-        return intensity
+    Reorder B_array so its axes match A_axes as much as possible.
+    Then move 'C' to the last axis if present.
 
-    shape_labels = labels.shape
-    shape_intensity = intensity.shape
-    nd_labels = len(shape_labels)
-    nd_intensity = len(shape_intensity)
+    Parameters
+    ----------
+    A_axes : list[str]
+        Axis order of A, e.g. ['Z','T','Y','X']
+    B_axes : list[str]
+        Axis order of B, e.g. ['C','T','Z','Y','X']
+    B_array : np.ndarray
+        Array to reorder.
 
-    # same number of dims: try to permute intensity to match labels
-    if nd_intensity == nd_labels:
-        for perm in permutations(range(nd_intensity)):
-            if tuple(shape_intensity[i] for i in perm) == shape_labels:
-                return intensity.transpose(perm)
-        raise ValueError(
-            f"No permutation of b.shape {shape_intensity} matches a.shape {shape_labels}."
-        )
+    Returns
+    -------
+    B_reordered : np.ndarray
+    new_axes : list[str]
+        New axis ordering after reordering + moving C to end.
+    """
 
-    # intensity has exactly one extra dim: try every axis as the extra one
-    if nd_intensity == nd_labels + 1:
-        axes = list(range(nd_intensity))
-        for extra_axis in axes:
-            remaining_axes = [ax for ax in axes if ax != extra_axis]
-            # try permutations of the remaining axes to match shape_labels
-            for perm_remaining in permutations(remaining_axes):
-                if tuple(shape_intensity[i] for i in perm_remaining) == shape_labels:
-                    # final permutation: place the permuted remaining axes first, then the extra axis last
-                    final_perm = list(perm_remaining) + [extra_axis]
-                    return intensity.transpose(final_perm)
-        raise ValueError(
-            f"Intensity image has one extra axis but no permutation places its other axes in order {shape_labels} "
-            f"with the extra axis last. intensity shape={shape_intensity}, labels shape={shape_labels}"
-        )
+    common = [ax for ax in A_axes if ax in B_axes]
+    remaining = [ax for ax in B_axes if ax not in A_axes]
+    new_axes = remaining + common
 
-    # any other difference in rank is invalid
-    raise ValueError(
-        "Intensity image must have either the same number of dimensions as labels, or exactly one more."
-        f" Got intensity ndim={nd_labels}, labels ndim={nd_intensity}."
-    )
+    # Map this order to B's current axes
+    transpose_order = [B_axes.index(ax) for ax in new_axes]
+    B_reordered = np.transpose(B_array, transpose_order)
+
+    if "C" in new_axes:
+        c_pos = new_axes.index("C")
+        if c_pos != len(new_axes) - 1:
+            # Move C to the end
+            new_axes.append(new_axes.pop(c_pos))
+            B_reordered = np.moveaxis(B_reordered, c_pos, -1)
+
+    return B_reordered, new_axes
 
 
 intensity_properties = [
@@ -155,6 +140,14 @@ shape_properties = [
         "dims": [3],
     },
 ]
+
+
+def slice_axis(arr, index, axis):
+    """Safely slice along a given axis for numpy or dask arrays."""
+    if isinstance(arr, da.core.Array):
+        return da.take(arr, index, axis=axis)
+    else:
+        return np.take(arr, index, axis=axis)
 
 
 class RegionPropsWidget(BaseToolWidget):
@@ -348,13 +341,6 @@ class RegionPropsWidget(BaseToolWidget):
     def _measure(self) -> None:
         """Measure selected region properties and update table, looping over C and T if present."""
 
-        def slice_axis(arr, index, axis):
-            """Safely slice along a given axis for numpy or dask arrays."""
-            if isinstance(arr, da.core.Array):
-                return da.take(arr, index, axis=axis)
-            else:
-                return np.take(arr, index, axis=axis)
-
         # extract dims and spacing
         dims = list(self.layer.metadata["dimensions"])
         data = self.layer.data
@@ -377,62 +363,81 @@ class RegionPropsWidget(BaseToolWidget):
         else:
             intensity = None
 
+        if intensity_layer is not None and "dimensions" not in intensity_layer.metadata:
+            msg = QMessageBox()
+            msg.setWindowTitle("Missing metadata")
+            msg.setText(
+                "Intensity layer does not have dimensions metadata. Please activate (select) the layer and ensure the dimensions are listed correctly to ensure the metadata is populated."
+            )
+            msg.setIcon(QMessageBox.Critical)
+            msg.exec_()
+            return
+
+        intensity_dims = intensity_layer.metadata["dimensions"]
+
         # identify axes
         has_time = "T" in dims
         has_channel = "C" in dims
         time_axis = dims.index("T") if has_time else None
-        channel_axis = dims.index("C") if has_channel else None
+        t_range = range(data.shape[time_axis]) if has_time else [None]
 
-        # reorder intensity if needed (C must be last for regionprops)
+        channel_axis = dims.index("C") if has_channel else None
+        c_range = range(data.shape[channel_axis]) if has_channel else [None]
+
+        if (
+            time_axis is not None
+            and channel_axis is not None
+            and channel_axis > time_axis
+        ):
+            channel_axis -= 1  # because we slice time first
+
         if intensity is not None:
-            try:
-                intensity = reorder_intensity_like_labels(data, intensity)
-            except ValueError:
-                msg = QMessageBox()
-                msg.setWindowTitle("Shape mismatch")
-                msg.setText(
-                    f"Label layer and intensity image must have compatible shapes.\n"
-                    f"Labels: {data.shape}\nIntensity: {intensity.shape}"
-                )
-                msg.setIcon(QMessageBox.Critical)
-                msg.exec_()
-                return
+            intensity, intensity_dims = reorder_array(dims, intensity_dims, intensity)
 
         # prepare for nested loops over T and C
         prop_list = []
 
-        t_range = range(data.shape[time_axis]) if has_time else [None]
-        c_range = range(data.shape[channel_axis]) if has_channel else [None]
+        try:
+            for t in tqdm(t_range, desc="Time"):
+                data_t = slice_axis(data, t, time_axis) if has_time else data
 
-        for t in tqdm(t_range, desc="Time"):
-            data_t = slice_axis(data, t, time_axis) if has_time else data
+                for c in tqdm(c_range, desc="Channel", leave=False):
+                    data_tc = (
+                        slice_axis(data_t, c, channel_axis) if has_channel else data_t
+                    )
 
-            for c in tqdm(c_range, desc="Channel", leave=False):
-                data_tc = slice_axis(data_t, c, channel_axis) if has_channel else data_t
+                    # slice intensity if present
+                    if intensity is not None:
+                        int_slice = intensity
+                        if has_time:
+                            int_t_dim = intensity_dims.index("T")
+                            int_slice = slice_axis(int_slice, t, int_t_dim)
+                    else:
+                        int_slice = None
 
-                # slice intensity if present
-                if intensity is not None:
-                    int_slice = intensity
+                    p = calculate_extended_props(
+                        data_tc,
+                        intensity_image=int_slice,
+                        properties=features,
+                        spacing=spatial_spacing,
+                    )
+
                     if has_time:
-                        int_slice = slice_axis(int_slice, t, time_axis)
-                    if has_channel and int_slice.ndim > data_tc.ndim:
-                        int_slice = slice_axis(int_slice, c, channel_axis)
-                else:
-                    int_slice = None
+                        p["time_point"] = t
+                    if has_channel:
+                        p["channel"] = c
 
-                p = calculate_extended_props(
-                    data_tc,
-                    intensity_image=int_slice,
-                    properties=features,
-                    spacing=spatial_spacing,
-                )
+                    prop_list.append(p)
 
-                if has_time:
-                    p["time_point"] = t
-                if has_channel:
-                    p["channel"] = c
-
-                prop_list.append(p)
+        except ValueError as e:
+            msg = QMessageBox()
+            msg.setWindowTitle("Error in measuring region properties")
+            msg.setText(
+                f"Region properties could not be computed: {e}. Please check if your labels layer and intensity image layer are a valid match."
+            )
+            msg.setIcon(QMessageBox.Critical)
+            msg.exec_()
+            return
 
         # concatenate all properties
         props = pd.concat(prop_list, ignore_index=True)

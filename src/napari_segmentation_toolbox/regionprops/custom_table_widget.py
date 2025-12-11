@@ -262,6 +262,8 @@ class ColoredTableWidget(QWidget):
         step = list(self._viewer.dims.current_step)
         if "time_point" in self._table:
             step[dims.index("T")] = int(self._table["time_point"][row])
+        if "channel" in self._table:
+            step[dims.index("C")] = int(self._table["channel"][row])
         if len(spatial_coords) == 3:
             step[dims.index("Z")] = spatial_coords[-3]
         step[-2] = spatial_coords[-2]
@@ -296,15 +298,19 @@ class ColoredTableWidget(QWidget):
             self._reset_layer_colormap()
             return
 
+        t = None
+        c = None
+
         if "time_point" in self._table:
             time_dim = self._layer.metadata["dimensions"].index("T")
             t = position[time_dim]
-            row = self._find_row(time_point=t, label=label)
-            self._select_row(row, append)
 
-        else:
-            row = self._find_row(label=label)
-            self._select_row(row, append)
+        if "channel" in self._table:
+            channel_dim = self._layer.metadata["dimensions"].index("C")
+            c = position[channel_dim]
+
+        row = self._find_row(time_point=t, channel=c, label=label)
+        self._select_row(row, append)
 
         self._update_label_colormap()
 
@@ -351,9 +357,11 @@ class ColoredTableWidget(QWidget):
         n_rows = self._table_widget.rowCount()
 
         for row in range(n_rows):
+            # Only check conditions that are not None
             if all(
                 float(self._table[col][row]) == float(val)
                 for col, val in conditions.items()
+                if val is not None
             ):
                 return row
 
@@ -378,44 +386,42 @@ class ColoredTableWidget(QWidget):
                 self._table[col] = np.delete(self._table[col], row, axis=0)
             self._table_widget.removeRow(row)
 
+        # Identify axes
+        dims = self._layer.metadata["dimensions"]
+        has_time = "time_point" in self._table
+        has_channel = "channel" in self._table
+        time_axis = dims.index("T") if has_time else None
+        channel_axis = dims.index("C") if has_channel else None
+
         # Delete from layer.data
-        if "time_point" in self._table:
-            time_dim = self._layer.metadata["dimensions"].index("T")
-            for info in self._undo_info:
-                row_data = info["row_data"]
-                t = row_data["time_point"]
-                label = row_data["label"]
+        for info in self._undo_info:
+            row_data = info["row_data"]
+            sl = [slice(None)] * self._layer.data.ndim
 
-                # Build slice for this time point
-                sl = [slice(None)] * self._layer.data.ndim
-                sl[time_dim] = int(t)
+            if has_time:
+                sl[time_axis] = int(row_data["time_point"])
+            if has_channel:
+                sl[channel_axis] = int(row_data["channel"])
 
-                # Extract the slice and store previous state
-                sliced_data = self._layer.data[tuple(sl)]
-                if isinstance(sliced_data, da.core.Array):
-                    sliced_data = sliced_data.compute()
-                # store only the boolean mask positions affected by the label
-                mask = sliced_data == int(label)
-                prev_values = sliced_data[mask].copy()
+            # Extract the relevant slice
+            sliced_data = self._layer.data[tuple(sl)]
+            if isinstance(sliced_data, da.core.Array):
+                sliced_data = sliced_data.compute()
 
-                info["slice"] = sl
-                info["mask"] = mask
-                info["prev_values"] = prev_values
+            # store only the boolean mask positions affected by the label
+            label = row_data["label"]
+            mask = sliced_data == int(label)
+            prev_values = sliced_data[mask].copy()
 
-                # Set label to 0
-                sliced_data[mask] = 0
-                # assign back to layer
-                self._layer.data[tuple(sl)] = sliced_data
+            info["slice"] = sl
+            info["mask"] = mask
+            info["prev_values"] = prev_values
 
-        else:
-            # no time_point → delete across full volume
-            for info in self._undo_info:
-                label = info["row_data"]["label"]
-                mask = self._layer.data == int(label)
-                prev_values = self._layer.data[mask].copy()
-                info["mask"] = mask
-                info["prev_values"] = prev_values
-                self._layer.data[mask] = 0
+            # Set label to 0
+            sliced_data[mask] = 0
+
+            # Assign back to layer
+            self._layer.data[tuple(sl)] = sliced_data
 
         # Enable undo button
         self.undo_button.setEnabled(True)

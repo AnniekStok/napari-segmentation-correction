@@ -33,20 +33,6 @@ from napari_segmentation_toolbox.regionprops.regionprops_extended import (
 )
 
 
-def slice_axis(arr: np.ndarray | da.core.Array, idx: int, axis: int) -> np.ndarray:
-    """Returns arr sliced at position idx along the given axis.
-    Works for both NumPy and Dask arrays."""
-
-    if isinstance(arr, da.core.Array):
-        sl = [slice(None)] * arr.ndim
-        sl[axis] = idx
-        return arr[tuple(sl)].compute()
-    else:
-        sl = [slice(None)] * arr.ndim
-        sl[axis] = idx
-        return arr[tuple(sl)]
-
-
 def reorder_intensity_like_labels(
     labels: np.ndarray, intensity: np.ndarray
 ) -> np.ndarray | None:
@@ -360,13 +346,14 @@ class RegionPropsWidget(BaseToolWidget):
         return selected_features
 
     def _measure(self) -> None:
-        """Measure selected region properties and update table."""
+        """Measure selected region properties and update table, looping over C and T if present."""
 
-        def drop_axis(arr, axis):
+        def slice_axis(arr, index, axis):
+            """Safely slice along a given axis for numpy or dask arrays."""
             if isinstance(arr, da.core.Array):
-                return da.take(arr, self.viewer.dims.current_step[axis], axis=axis)
+                return da.take(arr, index, axis=axis)
             else:
-                return np.take(arr, self.viewer.dims.current_step[axis], axis=axis)
+                return np.take(arr, index, axis=axis)
 
         # extract dims and spacing
         dims = list(self.layer.metadata["dimensions"])
@@ -390,11 +377,11 @@ class RegionPropsWidget(BaseToolWidget):
         else:
             intensity = None
 
-        # remove C dimension (labels must NOT have C)
-        if "C" in dims:
-            c_axis = dims.index("C")
-            data = drop_axis(data, c_axis)
-            dims.pop(c_axis)
+        # identify axes
+        has_time = "T" in dims
+        has_channel = "C" in dims
+        time_axis = dims.index("T") if has_time else None
+        channel_axis = dims.index("C") if has_channel else None
 
         # reorder intensity if needed (C must be last for regionprops)
         if intensity is not None:
@@ -411,43 +398,44 @@ class RegionPropsWidget(BaseToolWidget):
                 msg.exec_()
                 return
 
-        # choose 2D or 3D props
-        is_time = "T" in dims
-        time_axis = dims.index("T") if is_time else None
+        # prepare for nested loops over T and C
+        prop_list = []
 
-        # handle non-time case
-        if not is_time:
-            props = calculate_extended_props(
-                data,
-                intensity_image=intensity,
-                properties=features,
-                spacing=spatial_spacing,
-            )
-        else:
-            # iterate over T
-            nT = data.shape[time_axis]
-            prop_list = []
+        t_range = range(data.shape[time_axis]) if has_time else [None]
+        c_range = range(data.shape[channel_axis]) if has_channel else [None]
 
-            for t in tqdm(range(nT)):
-                lbl = slice_axis(data, t, time_axis)
-                if intensity is not None and intensity.ndim > lbl.ndim:
-                    # intensity has trailing C → slice T but not C
-                    int_slice = slice_axis(intensity, t, time_axis)
-                elif intensity is not None:
-                    int_slice = slice_axis(intensity, t, time_axis)
+        for t in tqdm(t_range, desc="Time"):
+            data_t = slice_axis(data, t, time_axis) if has_time else data
+
+            for c in tqdm(c_range, desc="Channel", leave=False):
+                data_tc = slice_axis(data_t, c, channel_axis) if has_channel else data_t
+
+                # slice intensity if present
+                if intensity is not None:
+                    int_slice = intensity
+                    if has_time:
+                        int_slice = slice_axis(int_slice, t, time_axis)
+                    if has_channel and int_slice.ndim > data_tc.ndim:
+                        int_slice = slice_axis(int_slice, c, channel_axis)
                 else:
                     int_slice = None
 
                 p = calculate_extended_props(
-                    lbl,
+                    data_tc,
                     intensity_image=int_slice,
                     properties=features,
                     spacing=spatial_spacing,
                 )
-                p["time_point"] = t
+
+                if has_time:
+                    p["time_point"] = t
+                if has_channel:
+                    p["channel"] = c
+
                 prop_list.append(p)
 
-            props = pd.concat(prop_list, ignore_index=True)
+        # concatenate all properties
+        props = pd.concat(prop_list, ignore_index=True)
 
         # update layer properties
         self.layer.properties = props

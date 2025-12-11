@@ -29,7 +29,7 @@ class NoSelectionHighlightDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         opt = QStyleOptionViewItem(option)
 
-        table = index.model().parent()  # your QTableWidget
+        table = index.model().parent()
 
         if opt.state & QStyle.State_Selected:
             opt.state &= ~QStyle.State_Selected

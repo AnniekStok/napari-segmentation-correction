@@ -1,0 +1,12 @@
+name: napari-segmentation-toolbox
+display_name: Segmentation Toolbox
+visibility: public
+categories: ["Annotation", "Segmentation"]
+contributions:
+  commands:
+    - id: napari-segmentation-toolbox.main_widget
+      python_name: napari_segmentation_toolbox.main_widget:LabelToolbox
+      title: Segmentation Toolbox
+  widgets:
+    - command: napari-segmentation-toolbox.main_widget
+      display_name: Segmentation Toolbox

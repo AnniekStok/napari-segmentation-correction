@@ -1,16 +1,16 @@
 # napari-segmentation-toolbox
 
-[![License BSD-3](https://img.shields.io/pypi/l/napari-segmentation-correction.svg?color=green)](https://github.com/AnniekStok/napari-segmentation-correction/raw/main/LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/napari-segmentation-correction.svg?color=green)](https://pypi.org/project/napari-segmentation-correction)
-[![Python Version](https://img.shields.io/pypi/pyversions/napari-segmentation-correction.svg?color=green)](https://python.org)
-[![tests](https://github.com/AnniekStok/napari-segmentation-correction/workflows/tests/badge.svg)](https://github.com/AnniekStok/napari-segmentation-correction/actions)
-[![codecov](https://codecov.io/gh/AnniekStok/napari-segmentation-correction/branch/main/graph/badge.svg)](https://codecov.io/gh/AnniekStok/napari-segmentation-correction)
-[![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-segmentation-correction)](https://napari-hub.org/plugins/napari-segmentation-correction)
+[![License BSD-3](https://img.shields.io/pypi/l/napari-segmentation-toolbox.svg?color=green)](https://github.com/AnniekStok/napari-segmentation-toolbox/raw/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/napari-segmentation-toolbox.svg?color=green)](https://pypi.org/project/napari-segmentation-toolbox)
+[![Python Version](https://img.shields.io/pypi/pyversions/napari-segmentation-toolbox.svg?color=green)](https://python.org)
+[![tests](https://github.com/AnniekStok/napari-segmentation-toolbox/workflows/tests/badge.svg)](https://github.com/AnniekStok/napari-segmentation-toolbox/actions)
+[![codecov](https://codecov.io/gh/AnniekStok/napari-segmentation-toolbox/branch/main/graph/badge.svg)](https://codecov.io/gh/AnniekStok/napari-segmentation-toolbox)
+[![napari hub](https://img.shields.io/endpoint?url=https://api.napari-hub.org/shields/napari-segmentation-toolbox)](https://napari-hub.org/plugins/napari-segmentation-toolbox)
 
-Toolbox for viewing, analyzing and correcting (cell) segmentation in 2D, 3D or 4D (t, z, y, x) (virtual) arrays. 
+Toolbox for viewing, analyzing and correcting (cell) segmentation in 2D, 3D or 4D (t, z, y, x) (virtual) arrays.
 ----------------------------------
 
-This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template. 
+This [napari] plugin was generated with [Cookiecutter] using [@napari]'s [cookiecutter-napari-plugin] template.
 
 <!--
 Don't miss the full getting started guide to set up your new package:
@@ -29,7 +29,7 @@ To install latest development version :
     pip install git+https://github.com/AnniekStok/napari-segmentation-toolbox.git
 
 ## Usage
-The aim is to serve as a toolbox that provides easy access to functionalities from ![SciPy](https://pypi.org/project/scipy/) and ![scikit-image](https://pypi.org/project/scikit-image/) that can help to explore and correct segmentation data. 
+The aim is to serve as a toolbox that provides easy access to functionalities from ![SciPy](https://pypi.org/project/scipy/) and ![scikit-image](https://pypi.org/project/scikit-image/) that can help to explore and correct segmentation data.
 
 - Orthogonal views for 3D data (also available ![separately](https://napari-hub.org/plugins/napari-orthogonal-views.html)).
 - Copy labels from a 2-5 dimensional array with multiple segmentation options to your current 2-5 dimensional label layer.
@@ -64,7 +64,7 @@ The aim is to serve as a toolbox that provides easy access to functionalities fr
 </table>
 
 ### Connected component analysis
-There are shortcut buttons for connected components labeling, keeping the largest cluster of connected labels, and to keep the largest fragment per label. 
+There are shortcut buttons for connected components labeling, keeping the largest cluster of connected labels, and to keep the largest fragment per label.
 
 <img width="910" height="770" alt="conncomp" src="https://github.com/user-attachments/assets/8c7f41b2-fa58-48cc-8921-29e703195401" />
 
@@ -73,7 +73,7 @@ All labels that share any pixel overlap with the mask are selected or removed.
 <img width="1500" height="844" alt="select_delete" src="https://github.com/user-attachments/assets/c3d96516-d34d-468c-9c51-3fed4e904463" />
 
 ### Binary mask interpolation
-It is possible to interpolate a 3D or 4D mask to fill in the region in between. In 3D, this means creating a 3D volume from slices, in 4D this means creating a time series of a volume that linearly 'morphs' into a different shape. 
+It is possible to interpolate a 3D or 4D mask to fill in the region in between. In 3D, this means creating a 3D volume from slices, in 4D this means creating a time series of a volume that linearly 'morphs' into a different shape.
 
 <table>
   <tr>
@@ -87,8 +87,8 @@ It is possible to interpolate a 3D or 4D mask to fill in the region in between. 
 </table>
 
 ### Measuring label properties
-You can measure label properties, including intensity (if a matching image layer is provided), area/volume, perimeter/surface area, circularity/sphericity, ellipse/ellipsoid axes in the 'Region Properties' tab. The plugin uses scikit-image regionprops with extended properties for 3D shapes based on methods from PoreSpy. 
-Make sure you set the dimensions correctly in the 'Extra layer controls' tab, to distinguish between measuring in 2D + time, 3D, and 3D + time, depending on your layer dimensions (2D to 4D). Once finished, a table displays the measurements, and a filter widget allows you to select objects matching a condition. The measurements are also displayed in the 'Plot'-tab for each layer for which you ran the region properties calculation. 
+You can measure label properties, including intensity (if a matching image layer is provided), area/volume, perimeter/surface area, circularity/sphericity, ellipse/ellipsoid axes in the 'Region Properties' tab. The plugin uses scikit-image regionprops with extended properties for 3D shapes based on methods from PoreSpy.
+Make sure you set the dimensions correctly in the 'Extra layer controls' tab, to distinguish between measuring in 2D + time, 3D, and 3D + time, depending on your layer dimensions (2D to 4D). Once finished, a table displays the measurements, and a filter widget allows you to select objects matching a condition. The measurements are also displayed in the 'Plot'-tab for each layer for which you ran the region properties calculation.
 
 ![TYX_regionprops](https://github.com/user-attachments/assets/49de0bf6-b3b5-49dc-926d-3a30206380f8)
 ![ZYX_regionprops](https://github.com/user-attachments/assets/56f050fb-e59f-48cd-93a3-77088bbc36af)
@@ -110,7 +110,7 @@ the coverage at least stays the same before you submit a pull request.
 ## License
 
 Distributed under the terms of the [BSD-3] license,
-"napari-segmentation-correction" is free and open source software
+"napari-segmentation-toolbox" is free and open source software
 
 ## Issues
 
@@ -127,7 +127,7 @@ If you encounter any problems, please [file an issue] along with a detailed desc
 [Mozilla Public License 2.0]: https://www.mozilla.org/media/MPL/2.0/index.txt
 [cookiecutter-napari-plugin]: https://github.com/napari/cookiecutter-napari-plugin
 
-[file an issue]: https://github.com/AnniekStok/napari-segmentation-correction/issues
+[file an issue]: https://github.com/AnniekStok/napari-segmentation-toolbox/issues
 
 [napari]: https://github.com/napari/napari
 [tox]: https://tox.readthedocs.io/en/latest/

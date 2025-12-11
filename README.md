@@ -90,9 +90,7 @@ It is possible to interpolate a 3D or 4D mask to fill in the region in between. 
 You can measure label properties, including intensity (if a matching image layer is provided), area/volume, perimeter/surface area, circularity/sphericity, ellipse/ellipsoid axes in the 'Region Properties' tab. The plugin uses scikit-image regionprops with extended properties for 3D shapes based on methods from PoreSpy.
 Make sure you set the dimensions correctly in the 'Extra layer controls' tab, to distinguish between measuring in 2D + time, 3D, and 3D + time, depending on your layer dimensions (2D to 4D). Once finished, a table displays the measurements, and a filter widget allows you to select objects matching a condition. The measurements are also displayed in the 'Plot'-tab for each layer for which you ran the region properties calculation.
 
-![TYX_regionprops](https://github.com/user-attachments/assets/49de0bf6-b3b5-49dc-926d-3a30206380f8)
-![ZYX_regionprops](https://github.com/user-attachments/assets/56f050fb-e59f-48cd-93a3-77088bbc36af)
-
+![table_widget](https://github.com/user-attachments/assets/a7cd7686-7f90-46de-9864-0cac3aa77cf2)
 
 ## See also
 This plugin has taken inspiration from other napari plugins with similar and more advanced functionalities for measuring features, such as:

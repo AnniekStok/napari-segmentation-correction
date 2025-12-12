@@ -29,12 +29,12 @@ requires-python = ">=3.10"
 # See best practices: https://napari.org/stable/plugins/building_a_plugin/best_practices.html
 dependencies = [
     "napari >= 0.6.2",
-    "numpy",
-    "scikit-image >= 0.24.0",
-    "scipy >= 1.15.0",
-    "dask_image",
-    "dask[array]",
-    "matplotlib",
+    "numpy < 2.0",
+    "scipy < 1.12",
+    "scikit-image >= 0.24.0, < 0.26",
+    "dask[array] <= 2025",
+    "dask_image <= 2025",
+    "matplotlib < 3.9",
     "napari-orthogonal-views >= 0.0.7",
 ]
 

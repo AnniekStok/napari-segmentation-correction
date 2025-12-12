@@ -26,7 +26,7 @@ You can install `napari-segmentation-toolbox` via [pip]:
 
 To install latest development version :
 
-    pip install git+https://github.com/AnniekStok/napari-segmentation-toolbox.git
+    pip install napari-segmentation-toolbox
 
 ## Usage
 The aim is to serve as a toolbox that provides easy access to functionalities from ![SciPy](https://pypi.org/project/scipy/) and ![scikit-image](https://pypi.org/project/scikit-image/) that can help to explore and correct segmentation data.

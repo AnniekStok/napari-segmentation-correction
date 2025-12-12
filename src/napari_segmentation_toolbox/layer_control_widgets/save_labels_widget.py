@@ -61,7 +61,7 @@ class SaveLabelsWidget(BaseToolWidget):
         self.use_compression = QCheckBox("Use compression")
         self.use_compression.setChecked(True)
         self.use_compression.setToolTip(
-            "Use zstd compression? This may take a bit longer to save."
+            "Use 'deflate' compression? This may take a bit longer to save."
         )
 
         # Filename
@@ -124,7 +124,9 @@ class SaveLabelsWidget(BaseToolWidget):
         use_compression = self.use_compression.isChecked()
         filename = remove_invalid_chars(self.filename.text())
 
-        outputdir = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        outputdir = QFileDialog.getExistingDirectory(
+            self, "Select Output Folder"
+        )
         if not outputdir:
             return
 
@@ -148,12 +150,12 @@ class SaveLabelsWidget(BaseToolWidget):
                         )
                     ),
                     current_stack,
-                    compression="zstd" if use_compression else None,
+                    compression="deflate" if use_compression else None,
                 )
 
         else:
             tifffile.imwrite(
                 os.path.join(outputdir, (filename + ".tif")),
                 data.astype(dtype),
-                compression="zstd" if use_compression else None,
+                compression="deflate" if use_compression else None,
             )

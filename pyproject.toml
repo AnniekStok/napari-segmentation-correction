@@ -1,12 +1,87 @@
+[project]
+name = "napari-segmentation-toolbox"
+dynamic = ["version"]
+description = "Toolbox for viewing, analyzing, and manually correcting (cell) segmentation in napari."
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+  {name = "Anniek Stokkermans", email = "anniek.stokkermans@gmail.com"},
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Framework :: napari",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+requires-python = ">=3.10"
+# napari can be included in dependencies if napari imports are required.
+# However, you should not include napari[all], napari[qt],
+# or any other Qt bindings directly (e.g. PyQt5, PySide2).
+# See best practices: https://napari.org/stable/plugins/building_a_plugin/best_practices.html
+dependencies = [
+    "napari >= 0.6.2",
+    "numpy",
+    "scikit-image >= 0.24.0",
+    "scipy >= 1.15.0",
+    "dask_image",
+    "dask[array]",
+    "matplotlib",
+    "napari-orthogonal-views >= 0.0.7",
+]
+
+[project.urls]
+Homepage = "https://github.com/AnniekStok/napari-segmentation-toolbox"
+Issues = "https://github.com/AnniekStok/napari-segmentation-toolbox/issues"
+
+[project.optional-dependencies]
+# Allow easily installation with the full, default napari installation
+# (including Qt backend) using napari-segmentation-toolbox[all].
+all = ["napari[all]"]
+testing = [
+    "tox",
+    "pytest",  # https://docs.pytest.org/en/latest/contents.html
+    "pytest-cov",  # https://pytest-cov.readthedocs.io/en/latest/
+    "pytest-qt",  # https://pytest-qt.readthedocs.io/en/latest/
+    "napari[qt]",  # test with napari's default Qt bindings
+]
+
+[project.entry-points."napari.manifest"]
+napari-segmentation-toolbox = "napari_segmentation_toolbox:napari.yaml"
+
+
+
 [build-system]
-requires = ["setuptools>=42.0.0", "wheel"]
+requires = ["setuptools>=61", "wheel", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
-[tool.ruff]
-line-length = 88
-target-version = "py310"
-fix = true
+[tool.setuptools]
+include-package-data = true
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml"]
+
+[tool.setuptools_scm]
+write_to = "src/napari_segmentation_toolbox/_version.py"
+fallback_version = "0.0.1+nogit"
+
+[tool.black]
+line-length = 79
+target-version = ['py310', 'py311', 'py312', 'py313']
+
+[tool.ruff]
+line-length = 79
 lint.select = [
     "E", "F", "W", #flake8
     "UP", # pyupgrade
@@ -20,20 +95,10 @@ lint.select = [
     "PIE", # flake8-pie
     "SIM", # flake8-simplify
 ]
-
 lint.ignore = [
+    "E501", # line too long. let black handle this
     "UP006", "UP007", # type annotation. As using magicgui require runtime type annotation then we disable this.
-    "ISC001", # implicit string concatenation
-    "E501", # line too long
 ]
-
-lint.per-file-ignores = { "scripts/*.py" = ["F"] }
-
-# https://docs.astral.sh/ruff/formatter/
-[tool.ruff.format]
-
-[tool.mypy]
-ignore_missing_imports = true
 
 exclude = [
     ".bzr",
@@ -57,5 +122,5 @@ exclude = [
     "*_vendor*",
 ]
 
-target-version = "py38"
+target-version = "py310"
 fix = true
